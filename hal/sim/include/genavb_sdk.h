@@ -25,10 +25,11 @@
 #define BOARD_NET_RX_PACKETS     8
 #define BOARD_NET_RX_PERIOD_MULT 1
 
-#define BOARD_NUM_PORTS      1
-#define BOARD_NUM_ENET_PORTS 1
+/* Two network ports, both driven through the openPAAD HAL (paad/genavb). */
+#define BOARD_NUM_PORTS     2
+#define BOARD_NUM_HAL_PORTS 2
 
-#define BOARD_NET_PORT0_DRV_TYPE          ENET_1G_t
+#define BOARD_NET_PORT0_DRV_TYPE          HAL_t
 #define BOARD_NET_PORT0_DRV_INDEX         0
 #define BOARD_NET_PORT0_DRV_BASE          0
 #define BOARD_NET_PORT0_PHY_INDEX         -1
@@ -36,6 +37,15 @@
 #define BOARD_NET_PORT0_HW_CLOCK          0
 #define BOARD_NET_PORT0_TRAFFIC_CLASS_MAX 3
 #define BOARD_NET_PORT0_SR_CLASS_MAX      2
+
+#define BOARD_NET_PORT1_DRV_TYPE          HAL_t
+#define BOARD_NET_PORT1_DRV_INDEX         1
+#define BOARD_NET_PORT1_DRV_BASE          0
+#define BOARD_NET_PORT1_PHY_INDEX         -1
+#define BOARD_NET_PORT1_MII_MODE          0
+#define BOARD_NET_PORT1_HW_CLOCK          1
+#define BOARD_NET_PORT1_TRAFFIC_CLASS_MAX 3
+#define BOARD_NET_PORT1_SR_CLASS_MAX      2
 
 /* Board services expected by GenAVB (implemented by the simulator). */
 int BOARD_NetPort_Get_MAC(unsigned int port, uint8_t *mac);

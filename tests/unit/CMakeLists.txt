@@ -15,6 +15,7 @@ endif()
 add_subdirectory(${CMAKE_SOURCE_DIR}/hal ${CMAKE_BINARY_DIR}/hal)
 add_subdirectory(${CMAKE_SOURCE_DIR}/hal/sim ${CMAKE_BINARY_DIR}/hal/sim)
 add_subdirectory(${CMAKE_SOURCE_DIR}/paad ${CMAKE_BINARY_DIR}/paad)
+add_subdirectory(${CMAKE_SOURCE_DIR}/paad/genavb ${CMAKE_BINARY_DIR}/paad/genavb)
 
 add_executable(openpaad_unit_tests
   srp_bandwidth_test.cpp
@@ -34,5 +35,19 @@ set_source_files_properties(genavb_shim.c PROPERTIES COMPILE_OPTIONS "-Wno-extra
 set_source_files_properties(hal_headers_test.c PROPERTIES COMPILE_OPTIONS "-std=c11;-pedantic")
 set_source_files_properties(hal_headers_test.cpp PROPERTIES COMPILE_OPTIONS "-pedantic")
 
+# Tests that need a running FreeRTOS (POSIX port): the GenAVB HAL port driver.
+add_executable(openpaad_rtos_tests
+  rtos_test_main.cpp
+  genavb_hal_port_test.cpp
+  genavb_hal_fixture.c
+)
+target_link_libraries(openpaad_rtos_tests PRIVATE paad_genavb_hal paad_hal_sim GTest::gtest)
+target_compile_features(openpaad_rtos_tests PRIVATE cxx_std_17)
+target_compile_options(openpaad_rtos_tests PRIVATE -Wall -Wextra -Werror)
+# The C bridge includes GenAVB's OS-layer headers.
+set_source_files_properties(genavb_hal_fixture.c PROPERTIES COMPILE_OPTIONS
+  "-Wno-unused-parameter;-Wno-sign-compare;-Wno-address-of-packed-member;-Wno-missing-field-initializers")
+
 include(GoogleTest)
 gtest_discover_tests(openpaad_unit_tests)
+gtest_discover_tests(openpaad_rtos_tests)

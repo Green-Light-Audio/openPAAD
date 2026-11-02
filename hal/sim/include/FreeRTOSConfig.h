@@ -18,10 +18,12 @@
 #define configTICK_RATE_HZ                      1000
 #define configTICK_TYPE_WIDTH_IN_BITS           TICK_TYPE_WIDTH_64_BITS
 #define configMAX_PRIORITIES                    32
-#define configMINIMAL_STACK_SIZE                1024
+#define configMINIMAL_STACK_SIZE                4096 /* words: host threads need more than PTHREAD_STACK_MIN */
+#define configSTACK_DEPTH_TYPE                  uint32_t
 #define configMAX_TASK_NAME_LEN                 20
 #define configTOTAL_HEAP_SIZE                   (8 * 1024 * 1024)
 #define configSUPPORT_STATIC_ALLOCATION         1
+#define configKERNEL_PROVIDED_STATIC_MEMORY     1
 #define configSUPPORT_DYNAMIC_ALLOCATION        1
 #define configUSE_MUTEXES                       1
 #define configUSE_RECURSIVE_MUTEXES             1
@@ -33,7 +35,7 @@
 #define configUSE_TIMERS                        1
 #define configTIMER_TASK_PRIORITY               (configMAX_PRIORITIES - 1)
 #define configTIMER_QUEUE_LENGTH                32
-#define configTIMER_TASK_STACK_DEPTH            2048
+#define configTIMER_TASK_STACK_DEPTH            4096
 #define configUSE_IDLE_HOOK                     0
 #define configUSE_TICK_HOOK                     0
 #define configCHECK_FOR_STACK_OVERFLOW          0

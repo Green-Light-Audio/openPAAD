@@ -75,3 +75,50 @@ add_library(paad_hal_sim STATIC
 target_include_directories(paad_hal_sim PUBLIC include)
 target_link_libraries(paad_hal_sim PUBLIC paad_hal Threads::Threads)
 target_compile_options(paad_hal_sim PRIVATE -Wall -Wextra -Werror $<$<COMPILE_LANGUAGE:C>:-std=gnu11>)
+
+# --- FreeRTOS on the host --------------------------------------------------------
+# The FreeRTOS kernel with its POSIX port (tasks are host threads) and the NXP
+# RTOS abstraction layer GenAVB is written against.
+
+file(GLOB _ral_srcs CONFIGURE_DEPENDS ${_ral}/*.c)
+
+add_library(freertos_posix STATIC
+  ${_freertos}/tasks.c
+  ${_freertos}/queue.c
+  ${_freertos}/list.c
+  ${_freertos}/timers.c
+  ${_freertos}/event_groups.c
+  ${_freertos}/stream_buffer.c
+  ${_freertos}/portable/MemMang/heap_3.c
+  ${_freertos}/portable/ThirdParty/GCC/Posix/port.c
+  ${_freertos}/portable/ThirdParty/GCC/Posix/utils/wait_for_event.c
+  ${_ral_srcs}
+  src/console.c
+)
+target_include_directories(freertos_posix PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${_freertos}/include
+  ${_freertos}/portable/ThirdParty/GCC/Posix
+  ${_freertos}/portable/ThirdParty/GCC/Posix/utils
+  ${_ral}/include
+)
+target_link_libraries(freertos_posix PUBLIC Threads::Threads)
+target_compile_options(freertos_posix PRIVATE -w) # third-party code, built as is
+
+# --- GenAVB OS layer on the host --------------------------------------------------
+# The parts of GenAVB's RTOS layer that run on the simulator, built unchanged.
+# Grows with openpaad-sim; hardware drivers are replaced by paad/genavb.
+
+add_library(genavb_rtos_host STATIC
+  ${_genavb}/rtos/hw_clock.c
+  ${_genavb}/rtos/hw_timer.c
+  ${_genavb}/rtos/log.c
+  ${_genavb}/rtos/prng_32.c
+  ${_genavb}/rtos/stdlib.c
+)
+target_include_directories(genavb_rtos_host PUBLIC ${_genavb}/rtos)
+target_link_libraries(genavb_rtos_host PUBLIC genavb_protocols_host freertos_posix)
+target_compile_options(genavb_rtos_host PRIVATE -Wall -Werror -Wno-address-of-packed-member)
+if(CMAKE_C_COMPILER_ID MATCHES "Clang")
+  target_compile_options(genavb_rtos_host PRIVATE -Wno-gnu-variable-sized-type-not-at-end -Wno-enum-conversion)
+endif()

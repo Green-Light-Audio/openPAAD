@@ -80,6 +80,7 @@ The firmware image is `build/evkb-rt1170/apps/ref-endpoint/openpaad-ref-endpoint
 apps/ref-endpoint/   reference endpoint application
 boards/evkb-rt1170/  board configuration, start-up, linker script
 paad/                openPAAD's pro-audio layer on top of GenAVB (portable)
+paad/genavb/         GenAVB network driver on top of the HAL
 hal/                 hardware abstraction layer and its ports (rt1170, sim)
 third_party/genavb/  NXP GenAVB/TSN 7.6.2 (git subtree)
 tests/               unit, fuzz, conformance and hardware-in-the-loop tests
