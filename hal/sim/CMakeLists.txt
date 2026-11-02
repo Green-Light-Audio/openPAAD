@@ -61,3 +61,15 @@ target_compile_definitions(genavb_protocols_host PUBLIC
   CONFIG_GENAVB_TSN_SOCKET=1
   CONFIG_GENAVB_TSN_SRP=1
 )
+
+# --- Simulator HAL port --------------------------------------------------------
+# Implements the openPAAD HAL (hal/include) on the host.
+
+find_package(Threads REQUIRED)
+
+add_library(paad_hal_sim STATIC
+  src/clock.c
+)
+target_include_directories(paad_hal_sim PUBLIC include)
+target_link_libraries(paad_hal_sim PUBLIC paad_hal Threads::Threads)
+target_compile_options(paad_hal_sim PRIVATE -Wall -Wextra -Werror $<$<COMPILE_LANGUAGE:C>:-std=gnu11>)
