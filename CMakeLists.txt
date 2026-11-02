@@ -62,9 +62,15 @@ if(GIT_FOUND)
 endif()
 configure_file(cmake/version.h.in ${CMAKE_BINARY_DIR}/generated/openpaad/version.h @ONLY)
 
-# --- openPAAD pro-audio layer -------------------------------------------------
+# --- openPAAD pro-audio layer and HAL ------------------------------------------
 add_subdirectory(paad)
 target_compile_options(paad PRIVATE ${OPENPAAD_CPU_FLAGS})
+
+add_subdirectory(hal)
+# The HAL headers must also be valid C11 for the target compiler.
+add_library(paad_hal_check OBJECT tests/unit/hal_headers_test.c)
+target_link_libraries(paad_hal_check PRIVATE paad_hal)
+target_compile_options(paad_hal_check PRIVATE ${OPENPAAD_CPU_FLAGS} -std=c11 -pedantic -Wall -Wextra -Werror)
 
 # --- Firmware images ---------------------------------------------------------
 include(boards/${OPENPAAD_BOARD}/firmware.cmake)

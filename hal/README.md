@@ -17,9 +17,27 @@ through the HAL. Decision 0009 explains why.
 | Storage | Small persistent store for names, bindings, IDs | Flash layout specific |
 | Identity | MAC address and unique ID source | Fuses, EEPROM or OTP |
 
-The HAL is specified as C headers in Phase 1. Today the ports plug in at
-GenAVB's OS layer (`genavb_sdk.h` and the functions behind it); the Phase 1
-HAL wraps that boundary so a port never has to read GenAVB internals.
+The HAL is specified as C headers in [`include/paad/hal/`](include/paad/hal/)
+(version 0.1; design in decision 0010):
+
+| Header | Service |
+| --- | --- |
+| `common.h` | Return codes, time and context conventions |
+| `clock.h` | gPTP hardware clock: read, frequency adjust, step |
+| `timer.h` | Event timers on the gPTP clock |
+| `eth.h` | Ethernet port: timestamped transmit and receive, multicast, credit-based shaping |
+| `mclk.h` | Media clock: steer the audio clock, capture it at gPTP instants |
+| `audio.h` | Audio input and output, period by period |
+| `storage.h` | Persistent key-value settings |
+| `platform.h` | The platform: its service instances and identity sources |
+
+A generic GenAVB port driver built on these headers connects them to the
+stack (Phase 1). It replaces only GenAVB's hardware drivers: on the host,
+90 of the 95 files of GenAVB's OS layer already build unchanged with
+warnings as errors (GCC and Clang). The five that need the HAL are the ENET
+driver (`net_port_enet*.c`), the gPTP event timer glue (`gptp_dev.c`) and
+the i.MX audio PLL driver (`imx-pll.c`). The RT1170 still plugs in at GenAVB's own OS layer
+(`genavb_sdk.h`) until its HAL port is written.
 
 ## Ports
 
