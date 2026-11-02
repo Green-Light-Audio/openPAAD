@@ -31,6 +31,13 @@ endif()
 
 include(boards/${OPENPAAD_BOARD}/board.cmake)
 
+# Reproducible firmware: no absolute build paths in the image, so the same
+# commit gives the same binary on any machine.
+add_compile_options(
+  -ffile-prefix-map=${OPENPAAD_DEPS_DIR}=deps
+  -ffile-prefix-map=${CMAKE_CURRENT_SOURCE_DIR}=openpaad
+)
+
 # --- GenAVB/TSN stack --------------------------------------------------------
 # GenAVB's own CMake reads these variables; see third_party/genavb/README.md.
 set(TARGET ${GENAVB_TARGET})
