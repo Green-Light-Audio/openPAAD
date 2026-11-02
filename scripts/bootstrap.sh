@@ -13,6 +13,11 @@ repo_name="$(basename "${repo_dir}")"
 command -v west >/dev/null || { echo "west not found: pip install west" >&2; exit 1; }
 
 cd "${workspace}"
+# An empty .west directory (for example one created in advance to exclude it
+# from a sync tool) is not a west workspace yet: remove it so init can run.
+if [ -d .west ] && [ ! -f .west/config ]; then
+  rmdir .west
+fi
 if [ ! -d .west ]; then
   west init -l "${repo_name}"
 fi
