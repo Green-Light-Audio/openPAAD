@@ -1,14 +1,23 @@
 # openPAAD
 
-**An open-source firmware stack for professional audio over AVB, designed to
-interoperate with Milan devices.**
+**A portable, open-source firmware stack for professional audio over AVB,
+designed to interoperate with Milan devices. Reference platform: NXP
+i.MX RT1170.**
 
-openPAAD turns an NXP i.MX RT1170 microcontroller into a pro-audio AVB
+openPAAD turns a microcontroller or embedded processor into a pro-audio AVB
 endpoint: gPTP time, stream reservation, AAF audio and CRF media clock
 streams, and the ATDECC entity model that controllers such as Hive use to
 discover and connect devices. It builds on NXP's BSD-licensed GenAVB/TSN
 stack, adds what Milan v1.3 requires on top, and builds entirely from public
 sources.
+
+The stack has three layers. A portable core (protocols and the pro-audio
+layer) contains no chip-specific code and is built and tested on Linux and
+macOS on every commit. An explicit hardware abstraction layer (HAL) defines
+what a platform must provide: hardware timestamps, traffic shaping, clocks,
+media clock control and audio I/O. Each platform is a port of that HAL. The
+NXP i.MX RT1170 is the first and reference port; the host simulator is the
+second.
 
 > Status: **Phase 0, foundations.** The stack cross-compiles and links into a
 > bootable image for the MIMXRT1170-EVKB; it has not run on hardware yet.
@@ -38,6 +47,14 @@ with:
 | Stream Tspec and bandwidth per Milan v1.3 Table 4.4 | implemented and tested (`paad/`) |
 | Requirement matrix v0 | 100 rows, 7 confirmed gaps in GenAVB 7.6.2 |
 
+## Platforms
+
+| Platform | Role | State |
+| --- | --- | --- |
+| NXP i.MX RT1170 (MIMXRT1170-EVKB) | Reference port | Builds and links; hardware bring-up next |
+| Host simulator (Linux, macOS) | Development and CI | Protocol code builds; simulator in progress |
+| Further ports | Community and partners | After 1.0; see [hal/README.md](hal/README.md) |
+
 ## Quick start
 
 Requirements: Linux or macOS, Git, CMake 3.22 or later, Ninja, Python 3,
@@ -62,8 +79,8 @@ The firmware image is `build/evkb-rt1170/apps/ref-endpoint/openpaad-ref-endpoint
 ```
 apps/ref-endpoint/   reference endpoint application
 boards/evkb-rt1170/  board configuration, start-up, linker script
-paad/                openPAAD's pro-audio layer on top of GenAVB
-hal/sim/             host build and (Phase 1) network simulator
+paad/                openPAAD's pro-audio layer on top of GenAVB (portable)
+hal/                 hardware abstraction layer and its ports (rt1170, sim)
 third_party/genavb/  NXP GenAVB/TSN 7.6.2 (git subtree)
 tests/               unit, fuzz, conformance and hardware-in-the-loop tests
 docs/                decisions, requirement matrix, hardware notes, timing targets
