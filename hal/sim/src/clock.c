@@ -46,6 +46,37 @@ static uint64_t rebase(struct paad_sim_clock *c)
 	return c->ref_clock_ns;
 }
 
+uint64_t paad_sim_clock_at(struct paad_sim_clock *clk, uint64_t source_ns)
+{
+	uint64_t value;
+
+	pthread_mutex_lock(&clk->lock);
+	value = clock_at(clk, source_ns);
+	pthread_mutex_unlock(&clk->lock);
+
+	return value;
+}
+
+uint64_t paad_sim_clock_source_at(struct paad_sim_clock *clk, uint64_t clock_ns)
+{
+	const __int128 rate = (__int128)PAAD_HAL_NSEC_PER_SEC + clk->natural_ppb + clk->ppb;
+	__int128 delta, source;
+
+	pthread_mutex_lock(&clk->lock);
+	delta = (__int128)clock_ns - (__int128)clk->ref_clock_ns;
+	/* Invert clock_at(), rounding up so the clock has reached clock_ns. */
+	if (delta > 0)
+		source = (__int128)clk->ref_source_ns + (delta * (__int128)PAAD_HAL_NSEC_PER_SEC + rate - 1) / rate;
+	else
+		source = (__int128)clk->ref_source_ns + (delta * (__int128)PAAD_HAL_NSEC_PER_SEC) / rate;
+	pthread_mutex_unlock(&clk->lock);
+
+	if (source < 0)
+		return 0;
+
+	return (uint64_t)source;
+}
+
 static uint64_t sim_read_ns(struct paad_hal_clock *hal)
 {
 	struct paad_sim_clock *c = (struct paad_sim_clock *)hal;

@@ -23,6 +23,8 @@ add_executable(openpaad_unit_tests
   hal_headers_test.c
   hal_headers_test.cpp
   sim_clock_test.cpp
+  sim_world_test.cpp
+  sim_eth_test.cpp
 )
 target_link_libraries(openpaad_unit_tests PRIVATE paad genavb_protocols_host paad_hal_sim GTest::gtest_main)
 target_compile_features(openpaad_unit_tests PRIVATE cxx_std_17)

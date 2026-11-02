@@ -57,6 +57,13 @@ void paad_sim_clock_deinit(struct paad_sim_clock *clk);
 /** Host CLOCK_MONOTONIC in ns, the default source. */
 uint64_t paad_sim_monotonic_ns(void *ctx);
 
+/** Clock value at a given source time, with the clock's current rate. */
+uint64_t paad_sim_clock_at(struct paad_sim_clock *clk, uint64_t source_ns);
+
+/** Earliest source time at which the clock reads at least clock_ns, with
+ * the clock's current rate. May be in the past. */
+uint64_t paad_sim_clock_source_at(struct paad_sim_clock *clk, uint64_t clock_ns);
+
 #ifdef __cplusplus
 }
 #endif

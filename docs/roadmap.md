@@ -30,7 +30,7 @@ Each phase ends on a gate that is a test result, not a date.
 - [x] HAL v0.1 specified as C headers (decision 0010), checked as C11, C++17, Mach-O and Arm
 - [x] GenAVB `clz` made portable; 90 of 95 OS-layer files build on the host
 - [x] First HAL implementation: simulated gPTP clock, with tests
-- [ ] Simulated timers and Ethernet port (in-process virtual wire)
+- [x] Simulation world (virtual and real time), simulated timers and Ethernet ports joined by a virtual cable, with tests (gPTP-style peer delay measured to within 2 ns)
 - [ ] GenAVB port driver on top of the HAL
 - [ ] `openpaad-sim`: several endpoints in one process
 - [ ] Simulated media clock and audio

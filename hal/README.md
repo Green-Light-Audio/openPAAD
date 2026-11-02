@@ -44,7 +44,7 @@ the i.MX audio PLL driver (`imx-pll.c`). The RT1170 still plugs in at GenAVB's o
 | Directory | Platform | State |
 | --- | --- | --- |
 | `rt1170/` (+ `boards/evkb-rt1170/`) | NXP i.MX RT1170, FreeRTOS | Reference port: builds, bring-up in Phase 2 |
-| `sim/` | Linux and macOS host, FreeRTOS POSIX port | Protocol code builds; network and clock simulation in Phase 1 |
+| `sim/` | Linux and macOS host, FreeRTOS POSIX port | Clock, timers and Ethernet simulated (virtual or real time, two ports per cable); GenAVB driver, media clock and audio in Phase 1 |
 
 Candidates for a next hardware port, to be evaluated after 1.0: Linux on a
 PC with an Intel i210 or i226 network card (hardware credit-based shaping),
