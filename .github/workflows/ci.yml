@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  XPACK_VERSION: 14.2.1-1.1
+  XPACK_SHA256: ed8c7d207a85d00da22b90cf80ab3b0b2c7600509afadf6b7149644e9d4790a6
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: openpaad
+
+      - name: Install host tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libgtest-dev
+          pip install west==1.5.0
+
+      - name: Cache west dependencies
+        uses: actions/cache@v4
+        with:
+          path: deps
+          key: west-${{ hashFiles('openpaad/west.yml') }}
+
+      - name: Fetch dependencies
+        run: openpaad/scripts/bootstrap.sh
+
+      - name: Install Arm toolchain (pinned)
+        run: |
+          curl -fsSL -o xpack.tgz https://github.com/xpack-dev-tools/arm-none-eabi-gcc-xpack/releases/download/v${XPACK_VERSION}/xpack-arm-none-eabi-gcc-${XPACK_VERSION}-linux-x64.tar.gz
+          echo "${XPACK_SHA256}  xpack.tgz" | sha256sum -c -
+          tar -xzf xpack.tgz -C "$RUNNER_TEMP"
+          echo "ARMGCC_DIR=$RUNNER_TEMP/xpack-arm-none-eabi-gcc-${XPACK_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Build and test
+        working-directory: openpaad
+        run: scripts/ci.sh
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: openpaad-ref-endpoint-evkb-rt1170
+          path: |
+            openpaad/build/evkb-rt1170/apps/ref-endpoint/openpaad-ref-endpoint.elf
+            openpaad/build/evkb-rt1170/apps/ref-endpoint/openpaad-ref-endpoint.bin
+            openpaad/build/evkb-rt1170/apps/ref-endpoint/openpaad-ref-endpoint.hex
+            openpaad/build/evkb-rt1170/apps/ref-endpoint/openpaad-ref-endpoint.map
+
+  # Hardware-in-the-loop tests run on the lab's self-hosted runner (Phase 2).
+  hil:
+    if: false
+    runs-on: [self-hosted, openpaad-lab]
+    needs: build-and-test
+    steps:
+      - run: echo "Phase 2"

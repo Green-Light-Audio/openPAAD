@@ -1,0 +1,101 @@
+id,clause,topic,requirement (paraphrased),scope,applies_to_reference_endpoint,genavb_7_6_2,phase,verification,notes
+AVB-001,4.2.1,AVB profile,Conform to the IEEE 802.1BA AVB system profile for end stations,both,yes,implemented,P2,interop,Covered by GenAVB gPTP/SRP/FQTSS; verify against a reference bridge
+AVB-002,4.2.2,Audio transport,Carry audio as IEEE 1722 AAF streams,both,yes,implemented,P4,interop,
+AVB-003,4.2.3,Media clocking,Support media clock streams (CRF) for clock distribution,both,yes,implemented,P3,hil,
+AVB-004,4.2.4,Connection management,Use the connection management protocol of chapter 5 (ACMP plus MVU binding),both,yes,partial,P5,sim,MVU BIND_STREAM/UNBIND_STREAM missing (see CTL-033/034)
+AVB-005,4.2.5,Redundancy,Seamless network redundancy per chapter 8 is optional,both,no,partial,later,interop,Out of scope for 1.0 (single AVB interface)
+PTP-001,4.2.6.1.1,gPTP neighborPropDelayThresh,Use an 800 ns neighbour propagation delay threshold on copper links,both,yes,unknown,P2,unit,Check GenAVB default profile values
+PTP-002,4.2.6.2.1,gPTP priority1,Advertise priority1 of 248 unless configured otherwise by the user,both,yes,unknown,P2,unit,
+PTP-003,4.2.6.2.2,gPTP message intervals,Use the profile's Sync (125 ms) and Announce/Pdelay (1 s) intervals,both,yes,unknown,P2,unit,
+PTP-004,4.2.6.2.3,gPTP timeout tolerances,Apply the tolerances defined for receipt timeouts,both,yes,unknown,P2,sim,
+PTP-005,4.2.6.2.4,gPTP asCapable,Declare asCapable only after a bounded number of valid Pdelay exchanges,both,yes,unknown,P2,sim,Target: 2 to 5 exchanges
+PTP-006,4.2.6.2.5,gPTP multiple Pdelay responses,Handle several Pdelay responses to one request as specified (link not asCapable),both,yes,unknown,P2,sim,
+PTP-007,4.2.6.2.6,gPTP Pdelay turnaround,Answer Pdelay requests within the specified turnaround time,both,yes,unknown,P2,hil,Hardware timestamp latency matters
+PTP-008,4.2.6.2.7,gPTP negative Pdelay,Treat a negative measured link delay as specified,both,yes,unknown,P2,unit,
+PTP-009,4.3.1.1,gPTP grandmaster capability,A Talker must be able to act as gPTP grandmaster,talker,yes,implemented,P2,hil,
+MRP-001,4.2.7.1.1,MRP timers,Use the specified MRP timer values and tolerances,both,yes,unknown,P2,unit,
+MRP-002,4.2.7.1.2,Malformed MRPDUs,Discard malformed MRPDUs safely,both,yes,unknown,P2,fuzz,Fuzz target planned
+MRP-003,4.2.7.1.3,MRPDU EndMarks,Encode and parse EndMarks as specified,both,yes,unknown,P2,unit,
+SRP-001,4.2.7.2.1,MSRP domain,Declare the SRP domain for class A with the specified priority and VLAN,both,yes,implemented,P2,interop,Class A: PCP 3 VID 2
+SRP-002,4.2.7.2.2,MSRP IN to MT,Support the instantaneous IN to MT transition,both,yes,unknown,P2,unit,
+SRP-003,4.2.7.3,MVRP,Operate MVRP as specified,both,yes,implemented,P2,interop,
+SRP-004,4.3.2,Talker MVRP join,Join the stream VLAN via MVRP before sending stream frames,talker,yes,unknown,P4,sim,
+SRP-005,4.3.3.1,Talker declaration validity,Declare a Talker attribute only when the destination MAC is MAAP-allocated without conflict and a listener has recently probed or registered,talker,yes,unknown,P5,sim,15 s probe window
+BW-001,4.3.3.2,Talker Tspec,Declare MaxFrameSize and MaxIntervalFrames as tabulated for each stream format (no drift byte in MaxFrameSize),talker,yes,gap,P5,unit,GenAVB still adds the drift byte (Milan v1.2 rule); characterised in tests/unit
+BW-002,4.3.3.2,Stream bandwidth,Compute stream bandwidth with the published framing rules (header+VLAN+FCS; minimum frame; drift byte; preamble+IPG),talker,yes,partial,P5,unit,paad_stream_bandwidth_bps() matches the table; GenAVB idle slope is 64 kbit/s higher
+BW-003,4.3.3.2,CRF bandwidth,Reserve the tabulated bandwidth for a one-timestamp CRF stream,talker,yes,gap,P5,unit,5696 kbit/s in v1.3 (was 5632 in v1.2)
+BW-004,4.3.4,FQTSS,Implement credit-based shaping for stream classes,talker,yes,implemented,P4,hil,ENET_1G hardware shapers
+AVTP-001,4.3.5.1,MAAP,Allocate stream destination MAC addresses with MAAP,talker,yes,implemented,P4,sim,
+AVTP-002,4.3.5.2,Timestamp uncertain (talker),Set the timestamp-uncertain bit as specified,talker,yes,unknown,P4,unit,
+AVTP-003,4.4.1,Listener MVRP,Join the stream VLAN as a listener,listener,yes,unknown,P4,sim,
+AVTP-004,4.4.2.1,Presentation time,Support the required presentation time offsets,listener,yes,unknown,P4,hil,Listener buffer at least 2.126 ms
+AVTP-005,4.4.2.2,AVTPDU filtering,Filter incoming AVTPDUs on stream ID and destination,listener,yes,unknown,P4,unit,
+AVTP-006,4.4.2.3,Timestamp uncertain (listener),Handle the timestamp-uncertain bit on reception,listener,yes,unknown,P4,unit,
+FMT-001,6.2,Base format,Support the base AAF PCM32 48 kHz format with 6 samples per frame,both,yes,implemented,P4,unit,
+FMT-002,6.4,Talker formats,Offer the base format on every stream output,talker,yes,unknown,P4,interop,2-channel output on the reference endpoint
+FMT-003,6.5,Listener formats,Accept every channel count from 1 to 8 in the base format on a stream input,listener,yes,unknown,P4,interop,Reference endpoint renders 2 of up to 8 channels
+FMT-004,6.3,Extended formats,Higher rates and channel counts are optional,both,no,n/a,later,,
+CLK-001,7.2.2,Media clock input,A Talker provides a CRF stream input for its media clock,talker,yes,unknown,P3,interop,
+CLK-002,7.2.3,Media clock output,Media clock output rules (CRF talker),both,optional,unknown,P3,interop,
+CLK-003,7.3.1,CRF format,Use the CRF format at 48 kHz with base interval 96 and one timestamp per PDU,both,yes,implemented,P3,unit,
+CLK-004,7.4,Clock quality,Meet the media clock source quality requirements,both,yes,unknown,P3,hil,Measured in Phase 3 (72 h no-slip gate)
+CLK-005,7.6.1,Media clock reference,Implement media clock reference priority (default and user),both,yes,partial,P5,sim,GenAVB has the MVU commands; check priority logic
+CLK-006,7.6.2,Media clock domain,Expose and honour the media clock domain,both,yes,unknown,P5,sim,
+AEM-001,5.3.3.1,ENTITY descriptor,Populate the ENTITY descriptor with the required capabilities and fields,both,yes,implemented,P5,unit,
+AEM-002,5.3.3.2,CONFIGURATION,Provide at least one configuration with the required descriptor counts,both,yes,implemented,P5,unit,
+AEM-003,5.3.3.3,AUDIO_UNIT,Provide an AUDIO_UNIT with supported sampling rates,both,yes,implemented,P5,unit,
+AEM-004,5.3.3.4,STREAM_INPUT/OUTPUT,Describe stream inputs and outputs with their formats and flags,both,yes,implemented,P5,unit,
+AEM-005,5.3.3.5,AVB_INTERFACE,Describe the AVB interface including gPTP parameters,both,yes,implemented,P5,unit,
+AEM-006,5.3.3.6,CLOCK_SOURCE,Describe internal and stream clock sources,both,yes,implemented,P5,unit,
+AEM-007,5.3.3.7-9,Stream ports clusters maps,Describe stream ports audio clusters and audio maps,both,yes,implemented,P5,unit,
+AEM-008,5.3.3.11,CLOCK_DOMAIN,Describe the clock domain and its sources,both,yes,implemented,P5,unit,
+AEM-009,5.3.3.12-14,TIMING PTP_INSTANCE PTP_PORT,New 1722.1-2021 timing descriptors as required by v1.3,both,yes,unknown,P5,unit,Check GenAVB support
+AEM-010,5.3.4.1,Locked state,Track the lock owner and expire the lock after 60 s,both,yes,implemented,P5,sim,
+AEM-011,5.3.4.2,Registered controllers,Keep at least 16 registered controllers for notifications,both,yes,unknown,P5,sim,
+AEM-012,5.3.6.3,AVB_INTERFACE counters,Maintain the required interface diagnostic counters,both,yes,partial,P5,sim,
+AEM-013,5.3.7.7,STREAM_OUTPUT counters,Maintain the required stream output counters,talker,yes,partial,P5,sim,
+AEM-014,5.3.7.7.1,Signal presence,Signal presence monitoring on audio channels,talker,optional,unknown,later,,
+AEM-015,5.3.8.10,STREAM_INPUT counters,Maintain the required stream input counters,listener,yes,partial,P5,sim,
+AEM-016,5.3.11.2,CLOCK_DOMAIN counters,Maintain the clock domain counters,both,yes,partial,P5,sim,
+AEM-017,5.3.13,User names,Persist user-settable names,both,yes,unknown,P5,hil,Needs non-volatile storage
+CTL-001,5.4.2.1,ACQUIRE_ENTITY,Never grant acquisition (answer not supported),both,yes,implemented,P5,unit,
+CTL-002,5.4.2.2,LOCK_ENTITY,Lock and unlock as specified (ENTITY descriptor only),both,yes,implemented,P5,unit,
+CTL-003,5.4.2.3,ENTITY_AVAILABLE,Answer ENTITY_AVAILABLE,both,yes,implemented,P5,unit,
+CTL-004,5.4.2.4,READ_DESCRIPTOR,Answer READ_DESCRIPTOR for every descriptor,both,yes,implemented,P5,unit,
+CTL-005,5.4.2.5-6,SET/GET_CONFIGURATION,Configuration commands,both,yes,implemented,P5,unit,
+CTL-006,5.4.2.7-8,SET/GET_STREAM_FORMAT,Stream format commands,both,yes,implemented,P5,unit,
+CTL-007,5.4.2.9-10,SET/GET_STREAM_INFO,Stream info commands with the per-direction field rules,both,yes,implemented,P5,unit,Field-level rules to verify
+CTL-008,5.4.2.11-12,SET/GET_NAME,Name commands,both,yes,implemented,P5,unit,
+CTL-009,5.4.2.13-14,SET/GET_SAMPLING_RATE,Sampling rate commands,both,yes,implemented,P5,unit,
+CTL-010,5.4.2.15-16,SET/GET_CLOCK_SOURCE,Clock source commands,both,yes,implemented,P5,unit,
+CTL-011,5.4.2.17-18,SET/GET_CONTROL,Control commands (identify control),both,yes,implemented,P5,unit,
+CTL-012,5.4.2.19-20,START/STOP_STREAMING,Start and stop streaming commands,both,yes,implemented,P5,unit,
+CTL-013,5.4.2.21-22,(DE)REGISTER_UNSOLICITED_NOTIFICATION,Unsolicited notification registration,both,yes,implemented,P5,unit,
+CTL-014,5.4.2.23,GET_AVB_INFO,GET_AVB_INFO,both,yes,implemented,P5,unit,
+CTL-015,5.4.2.24,GET_AS_PATH,GET_AS_PATH,both,yes,implemented,P5,unit,
+CTL-016,5.4.2.25,GET_COUNTERS,GET_COUNTERS for every descriptor type with counters,both,yes,implemented,P5,unit,
+CTL-017,5.4.2.26-28,Audio map commands,GET_AUDIO_MAP / ADD_AUDIO_MAPPINGS / REMOVE_AUDIO_MAPPINGS,both,yes,implemented,P5,unit,
+CTL-018,5.4.2.29,GET_DYNAMIC_INFO,Batch read of dynamic state,both,yes,implemented,P5,unit,New in 1722.1-2021
+CTL-019,5.4.2.30-31,SET/GET_MAX_TRANSIT_TIME,Max transit time commands for stream outputs,talker,yes,gap,P5,unit,Missing in GenAVB 7.6.2
+CTL-020,5.4.3,MVU format,Vendor-unique PDU format with the protocol ID and command types,both,yes,implemented,P5,unit,
+CTL-021,5.4.3.4,MVU timeouts,Respect MVU command timeouts,both,yes,unknown,P5,sim,
+CTL-030,5.4.4.1,GET_MILAN_INFO,Report protocol version and specification version; certification version zero when not certified,both,yes,gap,P5,unit,GenAVB hard-codes certification 1.1.0.0; openPAAD must report 0 and spec 1.3
+CTL-031,5.4.4.2-3,SET/GET_SYSTEM_UNIQUE_ID,System unique ID commands,both,yes,implemented,P5,unit,
+CTL-032,5.4.4.4-5,SET/GET_MEDIA_CLOCK_REFERENCE_INFO,Media clock reference info commands,both,yes,implemented,P5,unit,
+CTL-033,5.4.4.6,BIND_STREAM,MVU BIND_STREAM,listener,yes,gap,P5,sim,New in v1.3; missing in GenAVB 7.6.2
+CTL-034,5.4.4.7,UNBIND_STREAM,MVU UNBIND_STREAM,listener,yes,gap,P5,sim,New in v1.3; missing in GenAVB 7.6.2
+CTL-035,5.4.4.8,GET_STREAM_INPUT_INFO_EX,MVU GET_STREAM_INPUT_INFO_EX,listener,yes,gap,P5,unit,New in v1.3; missing in GenAVB 7.6.2
+NTF-001,5.4.5.1-3,Unsolicited notifications,Send the listed AEM and MVU unsolicited notifications,both,yes,partial,P5,sim,
+NTF-002,5.4.5.4,Departing controllers,Detect departed controllers and drop their registrations,both,yes,unknown,P5,sim,
+NTF-003,5.4.5.5,Identification,Identification notification,both,yes,unknown,P5,sim,
+ACMP-001,5.5.1.2-3,Binding and settlement,Separate binding (persistent) from settlement (probing),listener,yes,implemented,P5,sim,
+ACMP-002,5.5.1.4,Auto connect,Auto-connect behaviour,listener,optional,unknown,later,,
+ACMP-003,5.5.2.3,ACMP timeouts,Respect ACMP command timeouts,both,yes,implemented,P5,unit,
+ACMP-004,5.5.3,Listener state machine,Implement the listener sink state machine (UNBOUND to SETTLED states) including MVU events,listener,yes,partial,P5,sim,MVU-triggered transitions missing until CTL-033/034
+ACMP-005,5.5.4.1,PROBE_TX_COMMAND,Talker handling of PROBE_TX_COMMAND,talker,yes,implemented,P5,sim,
+ACMP-006,5.5.4.2,DISCONNECT_TX_COMMAND,Talker handling of DISCONNECT_TX_COMMAND,talker,yes,implemented,P5,sim,
+ACMP-007,5.5.4.3-4,GET_TX_STATE/GET_TX_CONNECTION,Talker state queries,talker,yes,implemented,P5,sim,
+ADP-001,5.6.2,ADPDU content,Advertise with the required ADPDU field values (valid time 10),both,yes,implemented,P5,unit,
+ADP-002,5.6.3,Advertise state machine,Advertise periodically with randomised delays; react to link and grandmaster changes,both,yes,implemented,P5,sim,Check v1.3 timer values
+ADP-003,5.6.4,Listener discovery,Track talker discovery and departure per sink,listener,yes,implemented,P5,sim,
+RED-001,8,Seamless network redundancy,Redundant pairs of interfaces and streams,both,no,partial,later,interop,Not in 1.0
