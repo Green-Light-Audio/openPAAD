@@ -28,5 +28,7 @@ else
   west config manifest.group-filter -- +board-files
 fi
 
-west update
+# --narrow fetches exactly the pinned commits; a plain shallow update only
+# fetches branch tips and fails when a pinned commit is no longer a tip.
+west update --narrow
 echo "Dependencies ready in ${workspace}/deps"
