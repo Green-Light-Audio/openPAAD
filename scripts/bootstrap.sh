@@ -13,10 +13,11 @@ repo_name="$(basename "${repo_dir}")"
 command -v west >/dev/null || { echo "west not found: pip install west" >&2; exit 1; }
 
 cd "${workspace}"
-# An empty .west directory (for example one created in advance to exclude it
-# from a sync tool) is not a west workspace yet: remove it so init can run.
-if [ -d .west ] && [ ! -f .west/config ]; then
-  rmdir .west
+# A .west directory without a manifest path (created in advance to exclude it
+# from a sync tool, or left by an interrupted run) is not a usable workspace:
+# remove it so init can run. It only ever holds west's own configuration.
+if [ -d .west ] && ! west config manifest.path >/dev/null 2>&1; then
+  rm -rf .west
 fi
 if [ ! -d .west ]; then
   west init -l "${repo_name}"
