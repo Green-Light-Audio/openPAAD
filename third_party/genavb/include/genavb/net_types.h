@@ -57,6 +57,8 @@
 #endif /* ntohs */
 
 
+#ifndef ntohll /* macOS system headers define them */
+
 #if defined(__BIG_ENDIAN__)
 
 #define ntohll(x) (x)
@@ -68,6 +70,8 @@
 #define ntohll(x) (((avb_u64)ntohl((avb_u32)(x)))<<32 | ntohl((avb_u32)((avb_u64)(x)>>32)))
 
 #endif /* __X_ENDIAN__ */
+
+#endif /* ntohll */
 
 
 struct net_ts_desc {
