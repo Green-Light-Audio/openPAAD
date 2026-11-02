@@ -18,9 +18,18 @@
 #include <stdbool.h>
 #include <inttypes.h>
 
+#if defined(__APPLE__)
+/* Mach-O section names need a "segment,section" form. Init/exit code
+ * placement only matters on embedded targets, so host builds on macOS
+ * leave these empty. */
+#define __init
+#define __exit
+#define __ep_rx_buffers
+#else
 #define __init	__attribute__((section (".text.init")))
 #define __exit	__attribute__((section (".text.exit")))
 #define __ep_rx_buffers	__attribute__((section(".bss.ep_rx_buff")))
+#endif
 
 typedef uint64_t	u64;
 typedef uint32_t	u32;

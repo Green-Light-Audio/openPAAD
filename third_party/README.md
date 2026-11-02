@@ -13,8 +13,11 @@ layer, NXP rtos-apps) are fetched by west at the commits pinned in
 GenAVB is vendored as a squashed git subtree (decision 0007). Changes made
 by openPAAD, newest first:
 
-_None yet._ The planned changes for Milan v1.3 are listed in
-`docs/requirements/README.md`.
+| Date | File | Change | Why |
+| --- | --- | --- | --- |
+| 2026-11-02 | `rtos/include/osal/sys_types.h` | `__init`, `__exit` and `__ep_rx_buffers` are empty on macOS | ELF section names are invalid in Mach-O; placement only matters on embedded targets |
+
+The planned changes for Milan v1.3 are listed in `docs/requirements/README.md`.
 
 ## Updating GenAVB
 
