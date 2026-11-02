@@ -89,6 +89,7 @@ typedef enum {
 	NETC_SW_t, /* NETC switch  */
 	NETC_EMDIO_t, /* EMDIO */
 	NETC_PORT_EMDIO_t, /* MAC Port MDIO */
+	HAL_t, /* openPAAD HAL port */
 	ENET_MAX_t
 } net_driver_type_t;
 
@@ -290,6 +291,13 @@ int port_init(void);
 void port_exit(void);
 int port_post_init(void);
 void port_pre_exit(void);
+
+/* openPAAD: ports driven through the openPAAD HAL. The driver lives in
+ * openPAAD (paad/genavb), not in GenAVB. It handles the PHY itself and
+ * reports link changes with port_link_event(), from task context. */
+int hal_port_init(struct net_port *port);
+void hal_port_status(struct net_port *port, struct net_port_status *status);
+void port_link_event(struct net_port *port, bool up, unsigned int speed, unsigned int duplex);
 
 static inline uint8_t *port_get_hwaddr(struct net_port *port)
 {

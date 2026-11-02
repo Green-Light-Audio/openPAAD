@@ -282,6 +282,11 @@ int port_status(struct net_port *port, struct net_port_status *status)
 {
 	if (port->up) {
 		status->up = true;
+#if CFG_NUM_HAL_PORTS
+		if (port->drv_type == HAL_t)
+			hal_port_status(port, status);
+		else
+#endif
 		phy_port_status(port->phy_index, status);
 	} else {
 		status->up = false;
@@ -695,6 +700,13 @@ static void port_phy_callback(void *data, unsigned int type, unsigned int speed,
 	}
 }
 
+#if CFG_NUM_HAL_PORTS
+void port_link_event(struct net_port *port, bool up, unsigned int speed, unsigned int duplex)
+{
+	port_phy_callback(port, up ? EVENT_PHY_UP : EVENT_PHY_DOWN, speed, duplex);
+}
+#endif
+
 __exit static void __port_pre_exit(struct net_port *port)
 {
 	if (port->phy_index != -1)
@@ -720,10 +732,11 @@ __init static int __port_post_init(struct net_port *port)
 			os_log(LOG_ERR, "port(%u) phy connect failed\n", port->index);
 			goto err_connect;
 		}
-	} else {
+	} else if (port->drv_type != HAL_t) {
 		/* Phy less MAC support */
 		port_phy_callback(port, EVENT_PHY_UP, port->phy_speed, port->phy_duplex);
 	}
+	/* HAL ports report their link state with port_link_event() */
 
 	/* Actual MAC setup is done on phy up (polled from net rx task) */
 
@@ -789,6 +802,12 @@ __init static int __port_init(struct net_port *port)
 	case NETC_SW_t:
 		port->drv_ops.init = &netc_sw_port_init;
 		break;
+
+#if CFG_NUM_HAL_PORTS
+	case HAL_t:
+		port->drv_ops.init = &hal_port_init;
+		break;
+#endif
 
 	default:
 		os_log(LOG_ERR, "port(%u) invalid driver type: %u\n", port->index, port->drv_type);

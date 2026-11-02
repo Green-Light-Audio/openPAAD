@@ -113,6 +113,7 @@ __init void logical_port_init(void)
 		case ENET_QOS_t:
 		case ENETC_1G_t:
 		case ENETC_PSEUDO_1G_t:
+		case HAL_t:
 			if ((num_endpoints < CFG_MAX_ENDPOINTS) && (num_endpoints < CFG_LOGICAL_NUM_PORT)) {
 				port_config[num_endpoints].net_port_id = i;
 				port_config[num_endpoints].enabled = true;
