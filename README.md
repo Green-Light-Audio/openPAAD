@@ -19,9 +19,10 @@ media clock control and audio I/O. Each platform is a port of that HAL. The
 NXP i.MX RT1170 is the first and reference port; the host simulator is the
 second.
 
-> Status: **Phase 0, foundations.** The stack cross-compiles and links into a
-> bootable image for the MIMXRT1170-EVKB; it has not run on hardware yet.
-> Nothing here is ready for a stage. See [the roadmap](docs/roadmap.md).
+> Status: **Phase 1, HAL and simulator.** The full stack runs on a PC or Mac
+> on simulated hardware, where gPTP synchronises two ports; the firmware
+> links for the MIMXRT1170-EVKB but has not run on hardware yet. Nothing here
+> is ready for a stage. See [the roadmap](docs/roadmap.md).
 
 ## Why
 
@@ -44,6 +45,7 @@ with:
 | Reference endpoint image (boot header, FreeRTOS, full AVB stack init) | links; not yet run on a board |
 | Reproducible firmware | same commit, same `.bin`, on any machine |
 | All GenAVB protocol code built for the host | builds, `-Wall -Werror` |
+| Full GenAVB stack on simulated hardware (`openpaad-sim`, Linux and macOS) | runs; gPTP locks a second port to within 300 ns in 3 s, checked in CI |
 | Stream Tspec and bandwidth per Milan v1.3 Table 4.4 | implemented and tested (`paad/`) |
 | Requirement matrix v0 | 100 rows, 7 confirmed gaps in GenAVB 7.6.2 |
 
@@ -52,7 +54,7 @@ with:
 | Platform | Role | State |
 | --- | --- | --- |
 | NXP i.MX RT1170 (MIMXRT1170-EVKB) | Reference port | Builds and links; hardware bring-up next |
-| Host simulator (Linux, macOS) | Development and CI | Protocol code builds; simulator in progress |
+| Host simulator (Linux, macOS) | Development and CI | Full stack runs on two simulated ports; audio and real-network back-ends next |
 | Further ports | Community and partners | After 1.0; see [hal/README.md](hal/README.md) |
 
 ## Quick start
@@ -81,6 +83,7 @@ apps/ref-endpoint/   reference endpoint application
 boards/evkb-rt1170/  board configuration, start-up, linker script
 paad/                openPAAD's pro-audio layer on top of GenAVB (portable)
 paad/genavb/         GenAVB network driver on top of the HAL
+apps/openpaad-sim/   the stack on simulated hardware (host builds)
 hal/                 hardware abstraction layer and its ports (rt1170, sim)
 third_party/genavb/  NXP GenAVB/TSN 7.6.2 (git subtree)
 tests/               unit, fuzz, conformance and hardware-in-the-loop tests

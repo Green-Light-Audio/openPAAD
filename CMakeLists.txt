@@ -20,6 +20,7 @@ get_filename_component(OPENPAAD_DEPS_DIR "${OPENPAAD_DEPS_DIR}" ABSOLUTE)
 if(OPENPAAD_BOARD STREQUAL "host")
   enable_testing()
   add_subdirectory(tests/unit)
+  add_subdirectory(apps/openpaad-sim)
   return()
 endif()
 

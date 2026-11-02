@@ -9,6 +9,8 @@
 
 #include "paad/sim/eth.h"
 
+#include "lock.h"
+
 #define ETH_MIN_LEN   60 /* without FCS */
 #define ETH_FCS       4
 #define ETH_PREAMBLE  8
@@ -85,7 +87,7 @@ static void deliver(void *arg, uint64_t source_ns)
 
 	(void)source_ns;
 
-	pthread_mutex_lock(&dst->lock);
+	sim_lock(&dst->lock);
 	if (!dst->started) {
 		/* port went down while the frame was on the wire */
 	} else if (f->len < PAAD_HAL_ETH_ADDR_LEN || !accepts(dst, f->data)) {
@@ -102,7 +104,7 @@ static void deliver(void *arg, uint64_t source_ns)
 		dst->stats.rx_frames++;
 		queued = true;
 	}
-	pthread_mutex_unlock(&dst->lock);
+	sim_unlock(&dst->lock);
 
 	free(f);
 
@@ -126,15 +128,15 @@ static int sim_start(struct paad_hal_eth *hal, const uint8_t addr[PAAD_HAL_ETH_A
 	struct paad_sim_eth *eth = to_sim(hal);
 	bool peer_up;
 
-	pthread_mutex_lock(&eth->lock);
+	sim_lock(&eth->lock);
 	if (eth->started) {
-		pthread_mutex_unlock(&eth->lock);
+		sim_unlock(&eth->lock);
 		return PAAD_HAL_ERR_STATE;
 	}
 	memcpy(eth->addr, addr, PAAD_HAL_ETH_ADDR_LEN);
 	eth->started = true;
 	peer_up = eth->peer && eth->peer->started;
-	pthread_mutex_unlock(&eth->lock);
+	sim_unlock(&eth->lock);
 
 	if (peer_up) {
 		notify_link(eth);
@@ -149,12 +151,12 @@ static void sim_stop(struct paad_hal_eth *hal)
 	struct paad_sim_eth *eth = to_sim(hal);
 	bool was_up;
 
-	pthread_mutex_lock(&eth->lock);
+	sim_lock(&eth->lock);
 	was_up = link_up(eth);
 	eth->started = false;
 	eth->rx_head = 0;
 	eth->rx_count = 0;
-	pthread_mutex_unlock(&eth->lock);
+	sim_unlock(&eth->lock);
 
 	if (was_up) {
 		notify_link(eth);
@@ -195,7 +197,7 @@ static int sim_set_multicast(struct paad_hal_eth *hal, const uint8_t addr[PAAD_H
 	if (!(addr[0] & 1))
 		return PAAD_HAL_ERR_INVALID;
 
-	pthread_mutex_lock(&eth->lock);
+	sim_lock(&eth->lock);
 	for (i = 0; i < eth->num_mcast; i++)
 		if (!memcmp(eth->mcast[i], addr, PAAD_HAL_ETH_ADDR_LEN))
 			break;
@@ -209,7 +211,7 @@ static int sim_set_multicast(struct paad_hal_eth *hal, const uint8_t addr[PAAD_H
 		memmove(eth->mcast[i], eth->mcast[i + 1], (eth->num_mcast - i - 1) * PAAD_HAL_ETH_ADDR_LEN);
 		eth->num_mcast--;
 	}
-	pthread_mutex_unlock(&eth->lock);
+	sim_unlock(&eth->lock);
 
 	return rc;
 }
@@ -229,9 +231,9 @@ static int sim_transmit(struct paad_hal_eth *hal, unsigned int queue, const stru
 	if (!done)
 		return PAAD_HAL_ERR_NO_MEMORY;
 
-	pthread_mutex_lock(&eth->lock);
+	sim_lock(&eth->lock);
 	if (!eth->started) {
-		pthread_mutex_unlock(&eth->lock);
+		sim_unlock(&eth->lock);
 		free(done);
 		return PAAD_HAL_ERR_STATE;
 	}
@@ -272,7 +274,7 @@ static int sim_transmit(struct paad_hal_eth *hal, unsigned int queue, const stru
 	}
 	if (rc == PAAD_HAL_OK && paad_sim_world_schedule(eth->world, end, complete_tx, done) != PAAD_HAL_OK)
 		rc = PAAD_HAL_ERR_NO_MEMORY;
-	pthread_mutex_unlock(&eth->lock);
+	sim_unlock(&eth->lock);
 
 	if (rc != PAAD_HAL_OK)
 		free(done);
@@ -286,7 +288,7 @@ static int sim_receive(struct paad_hal_eth *hal, struct paad_hal_eth_frame *fram
 	struct paad_sim_eth_rx_slot *slot;
 	int rc = 0;
 
-	pthread_mutex_lock(&eth->lock);
+	sim_lock(&eth->lock);
 	if (eth->rx_count) {
 		slot = &eth->rx[eth->rx_head];
 		if (slot->len > buf_len) {
@@ -301,7 +303,7 @@ static int sim_receive(struct paad_hal_eth *hal, struct paad_hal_eth_frame *fram
 			rc = 1;
 		}
 	}
-	pthread_mutex_unlock(&eth->lock);
+	sim_unlock(&eth->lock);
 
 	return rc;
 }
@@ -313,9 +315,9 @@ static int sim_set_shaper(struct paad_hal_eth *hal, unsigned int queue, uint64_t
 	if (queue >= PAAD_SIM_ETH_TX_QUEUES || queue < PAAD_SIM_ETH_TX_QUEUES - PAAD_SIM_ETH_SHAPED)
 		return PAAD_HAL_ERR_INVALID;
 
-	pthread_mutex_lock(&eth->lock);
+	sim_lock(&eth->lock);
 	eth->idle_slope_bps[queue] = idle_slope_bps;
-	pthread_mutex_unlock(&eth->lock);
+	sim_unlock(&eth->lock);
 
 	return PAAD_HAL_OK;
 }

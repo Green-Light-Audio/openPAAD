@@ -60,6 +60,20 @@ cmake --preset evkb-rt1170 && cmake --build --preset evkb-rt1170
 
 `scripts/ci.sh` runs both, exactly as CI does.
 
+## Running the simulator
+
+The host build also produces `openpaad-sim`, the stack on simulated hardware:
+GenAVB under FreeRTOS (POSIX port) on a board with two network ports joined
+by a virtual cable. Port 0 runs the full stack; port 1 runs a second gPTP
+instance whose clock starts 1000 s away and ticks 20 ppm fast.
+
+```sh
+build/host/apps/openpaad-sim/openpaad-sim -t 30
+```
+
+Every second it prints port 1's gPTP time minus port 0's. `--check-gptp <ns>`
+turns it into a test (CI runs `-t 20 --check-gptp 1000`).
+
 ## Flashing (Phase 2)
 
 The EVKB's on-board MCU-Link probe accepts the `.bin` through its USB mass

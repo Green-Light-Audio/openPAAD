@@ -36,7 +36,7 @@
 #define configTIMER_TASK_PRIORITY               (configMAX_PRIORITIES - 1)
 #define configTIMER_QUEUE_LENGTH                32
 #define configTIMER_TASK_STACK_DEPTH            4096
-#define configUSE_IDLE_HOOK                     0
+#define configUSE_IDLE_HOOK                     1 /* sleeps: see hal/sim/src/freertos_hooks.c */
 #define configUSE_TICK_HOOK                     0
 #define configCHECK_FOR_STACK_OVERFLOW          0
 #define configUSE_MALLOC_FAILED_HOOK            0

@@ -9,6 +9,16 @@
 
 #include "paad/sim/world.h"
 
+#include "lock.h"
+
+struct paad_sim_hooks paad_sim_hooks;
+
+void paad_sim_set_critical_hooks(void (*enter)(void), void (*exit)(void))
+{
+	paad_sim_hooks.enter = enter;
+	paad_sim_hooks.exit = exit;
+}
+
 enum due_kind {
 	DUE_NONE,
 	DUE_TIMER,
@@ -89,10 +99,10 @@ static void run_due(struct paad_sim_world *world, uint64_t limit_ns)
 		uint64_t at;
 		struct due d;
 
-		pthread_mutex_lock(&world->lock);
+		sim_lock(&world->lock);
 		d = next_due(world);
 		if (d.kind == DUE_NONE || d.source_ns > limit_ns) {
-			pthread_mutex_unlock(&world->lock);
+			sim_unlock(&world->lock);
 			return;
 		}
 
@@ -115,7 +125,7 @@ static void run_due(struct paad_sim_world *world, uint64_t limit_ns)
 			event_arg = d.event->arg;
 			d.event->used = false;
 		}
-		pthread_mutex_unlock(&world->lock);
+		sim_unlock(&world->lock);
 
 		if (timer_cb)
 			timer_cb(timer_arg);
@@ -131,17 +141,44 @@ int paad_sim_world_run_until(struct paad_sim_world *world, uint64_t source_ns)
 
 	run_due(world, source_ns);
 
-	pthread_mutex_lock(&world->lock);
+	sim_lock(&world->lock);
 	if (source_ns > world->virtual_now)
 		__atomic_store_n(&world->virtual_now, source_ns, __ATOMIC_RELEASE);
-	pthread_mutex_unlock(&world->lock);
+	sim_unlock(&world->lock);
 
 	return PAAD_HAL_OK;
+}
+
+uint64_t paad_sim_world_run_pending(struct paad_sim_world *world)
+{
+	struct due d;
+
+	run_due(world, paad_sim_world_now(world));
+
+	sim_lock(&world->lock);
+	d = next_due(world);
+	sim_unlock(&world->lock);
+
+	return d.kind == DUE_NONE ? UINT64_MAX : d.source_ns;
+}
+
+void paad_sim_world_set_wake_hook(struct paad_sim_world *world, void (*fn)(void *arg), void *arg)
+{
+	world->wake_hook = fn;
+	world->wake_arg = arg;
 }
 
 int paad_sim_world_run_for(struct paad_sim_world *world, uint64_t duration_ns)
 {
 	return paad_sim_world_run_until(world, paad_sim_world_now(world) + duration_ns);
+}
+
+/* Tell an external runner (paad_sim_world_run_pending) that the next
+ * deadline may have moved. Called without any simulator lock held. */
+static void notify_runner(struct paad_sim_world *world)
+{
+	if (world->wake_hook)
+		world->wake_hook(world->wake_arg);
 }
 
 static void wake_thread(struct paad_sim_world *world)
@@ -154,7 +191,7 @@ int paad_sim_world_schedule(struct paad_sim_world *world, uint64_t source_ns, pa
 {
 	unsigned int i;
 
-	pthread_mutex_lock(&world->lock);
+	sim_lock(&world->lock);
 	for (i = 0; i < PAAD_SIM_MAX_EVENTS; i++) {
 		struct paad_sim_event *e = &world->events[i];
 
@@ -167,11 +204,12 @@ int paad_sim_world_schedule(struct paad_sim_world *world, uint64_t source_ns, pa
 		e->fn = fn;
 		e->arg = arg;
 		wake_thread(world);
-		pthread_mutex_unlock(&world->lock);
+		sim_unlock(&world->lock);
+		notify_runner(world);
 		return PAAD_HAL_OK;
 	}
 	world->events_dropped++;
-	pthread_mutex_unlock(&world->lock);
+	sim_unlock(&world->lock);
 
 	return PAAD_HAL_ERR_NO_MEMORY;
 }
@@ -297,12 +335,13 @@ static int sim_timer_arm(struct paad_hal_timer *hal, uint64_t expiry_ns, uint64_
 {
 	struct paad_sim_timer *t = (struct paad_sim_timer *)hal;
 
-	pthread_mutex_lock(&t->world->lock);
+	sim_lock(&t->world->lock);
 	t->expiry_ns = expiry_ns;
 	t->period_ns = period_ns;
 	t->armed = true;
 	wake_thread(t->world);
-	pthread_mutex_unlock(&t->world->lock);
+	sim_unlock(&t->world->lock);
+	notify_runner(t->world);
 
 	return PAAD_HAL_OK;
 }
@@ -311,9 +350,9 @@ static int sim_timer_cancel(struct paad_hal_timer *hal)
 {
 	struct paad_sim_timer *t = (struct paad_sim_timer *)hal;
 
-	pthread_mutex_lock(&t->world->lock);
+	sim_lock(&t->world->lock);
 	t->armed = false;
-	pthread_mutex_unlock(&t->world->lock);
+	sim_unlock(&t->world->lock);
 
 	return PAAD_HAL_OK;
 }
@@ -336,12 +375,12 @@ int paad_sim_timer_init(struct paad_sim_timer *timer, struct paad_sim_world *wor
 	timer->world = world;
 	timer->clock = clock;
 
-	pthread_mutex_lock(&world->lock);
+	sim_lock(&world->lock);
 	if (world->num_timers < PAAD_SIM_MAX_TIMERS)
 		world->timers[world->num_timers++] = timer;
 	else
 		rc = PAAD_HAL_ERR_NO_MEMORY;
-	pthread_mutex_unlock(&world->lock);
+	sim_unlock(&world->lock);
 
 	return rc;
 }
@@ -351,7 +390,7 @@ void paad_sim_timer_deinit(struct paad_sim_timer *timer)
 	struct paad_sim_world *world = timer->world;
 	unsigned int i;
 
-	pthread_mutex_lock(&world->lock);
+	sim_lock(&world->lock);
 	for (i = 0; i < world->num_timers; i++) {
 		if (world->timers[i] == timer) {
 			world->timers[i] = world->timers[--world->num_timers];
@@ -359,5 +398,5 @@ void paad_sim_timer_deinit(struct paad_sim_timer *timer)
 		}
 	}
 	timer->armed = false;
-	pthread_mutex_unlock(&world->lock);
+	sim_unlock(&world->lock);
 }

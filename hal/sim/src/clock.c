@@ -8,6 +8,8 @@
 
 #include "paad/sim/clock.h"
 
+#include "lock.h"
+
 /* Largest frequency offset accepted, like a typical 1588 timer: 500 ppm. */
 #define SIM_CLOCK_MAX_ADJUST_PPB 500000
 
@@ -50,9 +52,9 @@ uint64_t paad_sim_clock_at(struct paad_sim_clock *clk, uint64_t source_ns)
 {
 	uint64_t value;
 
-	pthread_mutex_lock(&clk->lock);
+	sim_lock(&clk->lock);
 	value = clock_at(clk, source_ns);
-	pthread_mutex_unlock(&clk->lock);
+	sim_unlock(&clk->lock);
 
 	return value;
 }
@@ -62,14 +64,14 @@ uint64_t paad_sim_clock_source_at(struct paad_sim_clock *clk, uint64_t clock_ns)
 	const __int128 rate = (__int128)PAAD_HAL_NSEC_PER_SEC + clk->natural_ppb + clk->ppb;
 	__int128 delta, source;
 
-	pthread_mutex_lock(&clk->lock);
+	sim_lock(&clk->lock);
 	delta = (__int128)clock_ns - (__int128)clk->ref_clock_ns;
 	/* Invert clock_at(), rounding up so the clock has reached clock_ns. */
 	if (delta > 0)
 		source = (__int128)clk->ref_source_ns + (delta * (__int128)PAAD_HAL_NSEC_PER_SEC + rate - 1) / rate;
 	else
 		source = (__int128)clk->ref_source_ns + (delta * (__int128)PAAD_HAL_NSEC_PER_SEC) / rate;
-	pthread_mutex_unlock(&clk->lock);
+	sim_unlock(&clk->lock);
 
 	if (source < 0)
 		return 0;
@@ -82,9 +84,9 @@ static uint64_t sim_read_ns(struct paad_hal_clock *hal)
 	struct paad_sim_clock *c = (struct paad_sim_clock *)hal;
 	uint64_t now;
 
-	pthread_mutex_lock(&c->lock);
+	sim_lock(&c->lock);
 	now = clock_at(c, c->source(c->source_ctx));
-	pthread_mutex_unlock(&c->lock);
+	sim_unlock(&c->lock);
 
 	return now;
 }
@@ -98,10 +100,10 @@ static int sim_adjust_frequency(struct paad_hal_clock *hal, paad_hal_ppb_t ppb)
 	else if (ppb < -hal->max_adjust_ppb)
 		ppb = -hal->max_adjust_ppb;
 
-	pthread_mutex_lock(&c->lock);
+	sim_lock(&c->lock);
 	rebase(c);
 	c->ppb = ppb;
-	pthread_mutex_unlock(&c->lock);
+	sim_unlock(&c->lock);
 
 	return PAAD_HAL_OK;
 }
@@ -112,13 +114,13 @@ static int sim_step(struct paad_hal_clock *hal, int64_t offset_ns)
 	int rc = PAAD_HAL_OK;
 	uint64_t now;
 
-	pthread_mutex_lock(&c->lock);
+	sim_lock(&c->lock);
 	now = rebase(c);
 	if (offset_ns < 0 && (uint64_t)(-offset_ns) > now)
 		rc = PAAD_HAL_ERR_INVALID; /* would go before zero */
 	else
 		c->ref_clock_ns = now + (uint64_t)offset_ns;
-	pthread_mutex_unlock(&c->lock);
+	sim_unlock(&c->lock);
 
 	return rc;
 }

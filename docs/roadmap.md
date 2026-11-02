@@ -32,7 +32,8 @@ Each phase ends on a gate that is a test result, not a date.
 - [x] First HAL implementation: simulated gPTP clock, with tests
 - [x] Simulation world (virtual and real time), simulated timers and Ethernet ports joined by a virtual cable, with tests (gPTP-style peer delay measured to within 2 ns)
 - [x] GenAVB port driver on top of the HAL (`paad/genavb`, GenAVB driver type `HAL_t`), tested inside FreeRTOS on the host
-- [ ] `openpaad-sim`: several endpoints in one process
+- [x] `openpaad-sim`: full GenAVB stack on simulated hardware; gPTP locks port 1 to port 0 (end-to-end test in CI)
+- [ ] `openpaad-sim`: independent simulated devices in separate processes, joined by a local virtual cable
 - [ ] Simulated media clock and audio
 - [ ] Real-network back-ends (Linux veth, macOS feth/BPF)
 - [ ] Conformance harness, fuzz targets

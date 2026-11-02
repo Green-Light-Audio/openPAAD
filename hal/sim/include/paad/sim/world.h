@@ -69,6 +69,9 @@ struct paad_sim_world {
 
 	struct paad_sim_event events[PAAD_SIM_MAX_EVENTS];
 	unsigned int events_dropped;
+
+	void (*wake_hook)(void *arg);
+	void *wake_arg;
 };
 
 /** HAL timer on a simulated clock. */
@@ -92,6 +95,16 @@ uint64_t paad_sim_world_now(void *world);
  * source_ns. Callbacks run in the caller's thread. */
 int paad_sim_world_run_until(struct paad_sim_world *world, uint64_t source_ns);
 int paad_sim_world_run_for(struct paad_sim_world *world, uint64_t duration_ns);
+
+/** Run every event due now, in the caller's thread, and return the source
+ * time of the next one (UINT64_MAX if none). For running the world from an
+ * RTOS task instead of the background thread; wait until the returned time,
+ * or until the wake hook fires, then call again. Any mode. */
+uint64_t paad_sim_world_run_pending(struct paad_sim_world *world);
+
+/** fn(arg) is called whenever an event or a timer is added, from the
+ * caller's context and without simulator locks held. */
+void paad_sim_world_set_wake_hook(struct paad_sim_world *world, void (*fn)(void *arg), void *arg);
 
 /** Real time: start or stop the background thread that runs events. */
 int paad_sim_world_start(struct paad_sim_world *world);
