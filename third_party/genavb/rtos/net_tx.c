@@ -159,11 +159,17 @@ void port_jitter_stats(struct jitter_stats *s, unsigned int ptp_now) {}
 /* Return number of leading zeros in a BITS_PER_LONG-bit word */
 static inline unsigned long leading_zeros(unsigned long x)
 {
+#if defined(__arm__)
 	unsigned long ret;
 
 	__asm("clz\t%0, %1" : "=r" (ret) : "r" (x));
 
 	return ret;
+#else
+	/* Portable equivalent for host builds: like the Arm instruction, a zero
+	 * word has BITS_PER_LONG leading zeros. */
+	return x ? (unsigned long)__builtin_clzl(x) : BITS_PER_LONG;
+#endif
 }
 
 static inline void incr_credit(int *credit, unsigned int dt, unsigned int rate)
