@@ -1,0 +1,71 @@
+# openPAAD west manifest
+#
+# Pins every external dependency to an exact commit so that a build is
+# reproducible from public sources only. Versions follow MCUXpresso SDK
+# 26.03.00, the SDK release that matches GenAVB/TSN 7.6.2 (vendored under
+# third_party/genavb as a git subtree, not fetched by west).
+#
+#   west init -l openpaad && west update
+#
+# See docs/decisions/0002-genavb-7.6-as-base.md and
+# docs/decisions/0004-public-sources-only.md.
+
+manifest:
+  version: "1.0"
+
+  remotes:
+    - name: nxp
+      url-base: https://github.com/NXP
+    - name: nxp-mcuxpresso
+      url-base: https://github.com/nxp-mcuxpresso
+
+  defaults:
+    remote: nxp-mcuxpresso
+
+  group-filter: [-board-files]
+
+  projects:
+    # MCUXpresso SDK 26.03.00: drivers, device files, CMSIS, FreeRTOS, components
+    - name: mcuxsdk-core
+      path: deps/mcuxsdk
+      revision: 0455af22adf229f945516f912b16c22eb04f6a74
+      clone-depth: 1
+    - name: mcu-sdk-cmsis
+      path: deps/mcuxsdk/arch/arm/CMSIS
+      revision: dc8b75b360fce9c864a12f1ccc54172e0c733805
+      clone-depth: 1
+    - name: mcux-devices-rt
+      path: deps/mcuxsdk/devices/RT
+      revision: 3664324bd1240a92e05a31301f6636a7a19f01d2
+      clone-depth: 1
+    - name: freertos-kernel
+      path: deps/mcuxsdk/rtos/freertos/freertos-kernel
+      revision: e75d4285960e1b7a3d85d93463d5c81801c54f7a
+      clone-depth: 1
+    - name: mcux-component
+      path: deps/mcuxsdk/components
+      revision: 3d8bf5c7bb0aaa3c6334314590a831a9015991bb
+      clone-depth: 1
+
+    # Board pin-mux and clock files for the EVKB (large repository, only
+    # needed for firmware images: enable with `west config manifest.group-filter +board-files`)
+    - name: mcuxsdk-examples
+      path: deps/mcuxsdk/examples
+      revision: c37c97ca4376ecab88eb415f3b3679e10dee1ab7
+      clone-depth: 1
+      groups: [board-files]
+
+    # NXP RTOS abstraction layer and reusable application components (BSD-3-Clause)
+    - name: rtos-abstraction-layer
+      remote: nxp
+      path: deps/rtos-abstraction-layer
+      revision: bede9f04902953adab96c9a7d5121eca3e5dbcc8   # tag 1_7_0
+      clone-depth: 1
+    - name: rtos-apps
+      remote: nxp
+      path: deps/rtos-apps
+      revision: a10b6515aea3610ac8d22b4414235b560d884b3e   # tag 1_3_0
+      clone-depth: 1
+
+  self:
+    path: openpaad
