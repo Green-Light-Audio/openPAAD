@@ -38,6 +38,13 @@ release. The devcontainer (`.devcontainer/`) has everything installed.
 
 Host builds need a C/C++ compiler (GCC 12+ or Clang 15+), CMake 3.22+ and
 Ninja. GoogleTest is used from the system if present, otherwise fetched.
+Linux and macOS are both supported hosts (decision 0008); on macOS:
+
+```sh
+xcode-select --install
+brew install cmake ninja googletest
+pip3 install west
+```
 
 ## Builds
 

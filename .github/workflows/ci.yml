@@ -55,6 +55,28 @@ jobs:
             openpaad/build/evkb-rt1170/apps/ref-endpoint/openpaad-ref-endpoint.hex
             openpaad/build/evkb-rt1170/apps/ref-endpoint/openpaad-ref-endpoint.map
 
+  host-macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: openpaad
+
+      - name: Install host tools
+        run: |
+          brew install ninja googletest
+          pip3 install --break-system-packages west==1.5.0
+
+      - name: Fetch dependencies (host only)
+        run: openpaad/scripts/bootstrap.sh --host-only
+
+      - name: Build and test (host)
+        working-directory: openpaad
+        run: |
+          cmake --preset host
+          cmake --build --preset host
+          ctest --preset host
+
   # Hardware-in-the-loop tests run on the lab's self-hosted runner (Phase 2).
   hil:
     if: false

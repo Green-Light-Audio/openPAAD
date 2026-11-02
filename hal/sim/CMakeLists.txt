@@ -42,6 +42,14 @@ target_compile_options(genavb_protocols_host PUBLIC
   $<$<COMPILE_LANGUAGE:C>:-std=gnu99>
 )
 target_compile_options(genavb_protocols_host PRIVATE -Wall -Werror -Wno-address-of-packed-member)
+if(CMAKE_C_COMPILER_ID MATCHES "Clang")
+  # Clang (and Apple Clang on macOS) flags two harmless GenAVB habits that GCC
+  # accepts: a GNU extension for variable-sized structs not at the end of a
+  # struct, and implicit conversion between its two log-level enums.
+  target_compile_options(genavb_protocols_host PRIVATE
+    -Wno-gnu-variable-sized-type-not-at-end
+    -Wno-enum-conversion)
+endif()
 
 target_compile_definitions(genavb_protocols_host PUBLIC
   CONFIG_GENAVB_TSN_API=1
