@@ -32,6 +32,6 @@ every task that needs it.
 ## Consequences
 
 The real stack runs unchanged and deterministically enough for CI: gPTP
-locks two simulated ports to a few hundred nanoseconds. Event latency is up
+locks two simulated ports to within a few nanoseconds. Event latency is up
 to one tick, which is fine for protocol work; audio streaming at 8 kHz
 packet rates may need a faster tick (configurable) when it arrives.

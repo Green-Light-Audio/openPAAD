@@ -13,5 +13,5 @@ endif()
 target_compile_options(openpaad-sim PRIVATE -Wall -Wextra -Werror)
 
 # End to end: GenAVB's gPTP must bring port 1's clock onto port 0's.
-add_test(NAME openpaad_sim_gptp_sync COMMAND openpaad-sim -t 20 --check-gptp 1000)
+add_test(NAME openpaad_sim_gptp_sync COMMAND openpaad-sim -t 20 --check-gptp 100)
 set_tests_properties(openpaad_sim_gptp_sync PROPERTIES TIMEOUT 90 LABELS e2e)

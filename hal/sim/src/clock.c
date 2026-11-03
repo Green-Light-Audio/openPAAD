@@ -18,7 +18,13 @@ uint64_t paad_sim_monotonic_ns(void *ctx)
 	struct timespec ts;
 
 	(void)ctx;
+#if defined(__APPLE__)
+	/* macOS: CLOCK_MONOTONIC only has microsecond resolution; the raw
+	 * clock (mach timebase) has nanosecond resolution. */
+	clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
+#else
 	clock_gettime(CLOCK_MONOTONIC, &ts);
+#endif
 
 	return (uint64_t)ts.tv_sec * PAAD_HAL_NSEC_PER_SEC + (uint64_t)ts.tv_nsec;
 }

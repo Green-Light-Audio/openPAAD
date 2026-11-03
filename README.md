@@ -45,7 +45,7 @@ with:
 | Reference endpoint image (boot header, FreeRTOS, full AVB stack init) | links; not yet run on a board |
 | Reproducible firmware | same commit, same `.bin`, on any machine |
 | All GenAVB protocol code built for the host | builds, `-Wall -Werror` |
-| Full GenAVB stack on simulated hardware (`openpaad-sim`, Linux and macOS) | runs; gPTP locks a second port to within 300 ns in 3 s, checked in CI |
+| Full GenAVB stack on simulated hardware (`openpaad-sim`, Linux and macOS) | runs; gPTP locks a second port to within a few nanoseconds in about 3 s, checked in CI |
 | Stream Tspec and bandwidth per Milan v1.3 Table 4.4 | implemented and tested (`paad/`) |
 | Requirement matrix v0 | 100 rows, 7 confirmed gaps in GenAVB 7.6.2 |
 

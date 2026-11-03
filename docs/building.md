@@ -72,7 +72,9 @@ build/host/apps/openpaad-sim/openpaad-sim -t 30
 ```
 
 Every second it prints port 1's gPTP time minus port 0's. `--check-gptp <ns>`
-turns it into a test (CI runs `-t 20 --check-gptp 1000`).
+turns it into a test (CI runs `-t 20 --check-gptp 100`). The offset is computed
+exactly, for one simulated instant, so it shows gPTP's own accuracy and not
+the time it takes to read two clocks.
 
 ## Flashing (Phase 2)
 

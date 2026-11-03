@@ -17,6 +17,8 @@
  *   -t seconds        run for this long, then exit (default: forever)
  *   --check-gptp ns   exit with status 0 only if, over the last 5 seconds,
  *                     port 1's gPTP time stayed within ns of port 0's
+ *
+ * The simulated host clock has nanosecond resolution on Linux and macOS.
  */
 
 #include <inttypes.h>
@@ -29,14 +31,17 @@
 #include "task.h"
 
 #include "genavb/genavb.h"
+#include "os/clock.h"
 
 #include "paad/sim/freertos.h"
 #include "paad/sim/platform.h"
 
 /* GenAVB internals: start the management (MAC service) and gPTP instances
- * of a second endpoint port; api/rtos/init.c starts those of the first. */
+ * of a second endpoint port (api/rtos/init.c starts those of the first),
+ * and convert a port's hardware time to one of its clocks. */
 extern void *management_task_init(struct management_config *cfg);
 extern void *gptp_task_init(struct fgptp_config *cfg);
+extern int clock_time_from_hw(os_clock_id_t id, uint64_t hw_ns, uint64_t *ns);
 
 #define CHECK_WINDOW_S 5
 
@@ -48,23 +53,26 @@ static struct genavb_config config;
 static struct management_config management_port1;
 static struct fgptp_config gptp_port1;
 
-/* Port 1 gPTP time minus port 0 gPTP time, now. Both clocks are read twice
- * around each other without preemption, to cancel the time spent reading. */
+/* Port 1 gPTP time minus port 0 gPTP time, exactly: both computed for the
+ * same simulated instant, from each port's hardware time at that instant
+ * and GenAVB's own conversion to gPTP time. Reading the two clocks one
+ * after the other instead would add the time between the reads. */
 static int read_offset(int64_t *offset)
 {
-	uint64_t a0, b, a1;
+	struct paad_sim_platform *board = paad_sim_platform();
+	uint64_t now, g0, g1;
 	int rc;
 
 	taskENTER_CRITICAL();
-	rc = genavb_clock_gettime64(GENAVB_CLOCK_GPTP_0_0, &a0);
-	rc |= genavb_clock_gettime64(GENAVB_CLOCK_GPTP_1_0, &b);
-	rc |= genavb_clock_gettime64(GENAVB_CLOCK_GPTP_0_0, &a1);
+	now = paad_sim_world_now(&board->world);
+	rc = clock_time_from_hw(OS_CLOCK_GPTP_EP_0_0, paad_sim_clock_at(&board->clock[0], now), &g0);
+	rc |= clock_time_from_hw(OS_CLOCK_GPTP_EP_1_0, paad_sim_clock_at(&board->clock[1], now), &g1);
 	taskEXIT_CRITICAL();
 
-	if (rc != GENAVB_SUCCESS)
+	if (rc < 0)
 		return -1;
 
-	*offset = (int64_t)(b - (a0 + (a1 - a0) / 2));
+	*offset = (int64_t)(g1 - g0);
 
 	return 0;
 }
