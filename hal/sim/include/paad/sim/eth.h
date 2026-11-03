@@ -41,6 +41,7 @@ extern "C" {
 #define PAAD_SIM_ETH_MAX_MCAST   32
 #define PAAD_SIM_ETH_TX_QUEUES   3
 #define PAAD_SIM_ETH_SHAPED      2
+#define PAAD_SIM_ETH_LOCKSTEP_RING 4096
 
 struct paad_sim_eth_stats {
 	uint64_t tx_frames;
@@ -87,6 +88,15 @@ struct paad_sim_eth {
 	uint64_t peer_seen;  /**< source time of the last message from the peer */
 	uint64_t last_hello; /**< source time of the last hello sent */
 	char peer_path[104];
+
+	/* Lockstep in virtual time (paad_sim_eth_lockstep_*) */
+	bool peer_gone;      /**< peer said goodbye or fell silent: run alone */
+	uint64_t peer_next;  /**< peer's announced next event (virtual time) */
+	uint64_t sent_next;  /**< our last announcement */
+	uint64_t cable_tx;   /**< frames sent to the peer */
+	uint64_t cable_rx;   /**< frames received from the peer */
+	uint64_t acked;      /**< our frames the peer had received at its last announcement */
+	uint64_t arrival[PAAD_SIM_ETH_LOCKSTEP_RING]; /**< last-bit times of unacknowledged frames */
 };
 
 int paad_sim_eth_init(struct paad_sim_eth *eth, struct paad_sim_world *world, struct paad_sim_clock *clock,
@@ -100,11 +110,34 @@ int paad_sim_eth_connect(struct paad_sim_eth *a, struct paad_sim_eth *b, uint32_
 /** Join this port to a port of another process on the same host, through a
  * datagram socket bound at local_path that sends to peer_path. Frames carry
  * their simulated timing: both processes share the host's monotonic clock,
- * so the world must run in real time. The peer is up while it sends
+ * so both run in real time, or both in virtual time in lockstep (below).
+ * The peer is up while it sends
  * (hellos every 100 ms, gone after 500 ms of silence). The world polls the
  * socket (paad_sim_world_add_poller() is done here). */
 int paad_sim_eth_connect_socket(struct paad_sim_eth *eth, const char *local_path, const char *peer_path,
 				uint32_t propagation_ns);
+
+/*
+ * Lockstep: two processes simulating in virtual time keep their clocks
+ * together through the cable. Each announces the time of its next event;
+ * a process may run up to the horizon, the peer's next event (or the
+ * arrival of a frame we sent that it has not seen yet) plus the cable's
+ * propagation delay, since nothing the peer does can reach it earlier.
+ * Called from the simulation's idle loop.
+ */
+
+/** Tell the peer our next event time (sent only when it changes). */
+void paad_sim_eth_lockstep_announce(struct paad_sim_eth *eth, uint64_t next_ns);
+
+/** Latest time we may simulate to (UINT64_MAX once the peer is gone). */
+uint64_t paad_sim_eth_lockstep_horizon(struct paad_sim_eth *eth);
+
+/** Block until the peer sends something, and process it. A peer silent for
+ * timeout_ms of real time is considered gone. */
+void paad_sim_eth_lockstep_wait(struct paad_sim_eth *eth, int timeout_ms);
+
+/** Say goodbye to the peer (it stops waiting for us). */
+void paad_sim_eth_cable_bye(struct paad_sim_eth *eth);
 
 /** Time a frame of len bytes (no FCS) occupies the wire, in ns, including
  * padding, FCS, preamble and inter-packet gap. */

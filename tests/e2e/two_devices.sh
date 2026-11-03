@@ -5,8 +5,7 @@
 # Two simulated devices, each a separate openpaad-sim process with the full
 # stack, joined by a virtual cable:
 #   - gPTP must bring them to the same time: once locked, both print the same
-#     "gPTP - host clock" value (the host clock is shared), within LIMIT ns
-#     over the last 5 seconds;
+#     "gPTP - shared clock" value, within LIMIT ns over the last 5 seconds;
 #   - each must discover the other's ATDECC entity.
 #
 # Usage: two_devices.sh path/to/openpaad-sim [seconds] [limit_ns]
@@ -37,7 +36,7 @@ fi
 
 # gPTP: compare the per-second values of both sides over the last 5 s.
 if ! awk -v secs="$secs" -v limit="$limit" '
-	/gPTP - host clock:/ {
+	/gPTP - shared clock:/ {
 		t = $2; sub(/^t=/, "", t); sub(/s$/, "", t)
 		v = $(NF - 1)
 		if (FILENAME ~ /a\.out$/) a[t] = v; else b[t] = v

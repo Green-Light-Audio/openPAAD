@@ -74,7 +74,7 @@ build/host/apps/openpaad-sim/openpaad-sim -t 30
 Every second it prints port 1's gPTP time minus port 0's. GenAVB's own log
 goes to `openpaad-sim.log` (`--log <file>` to choose, `-v` to show it in the
 terminal instead). `--check-gptp <ns>`
-turns it into a test (CI runs `-t 20 --check-gptp 100`). The offset is computed
+turns it into a test (CI runs `--virtual -t 15 --check-gptp 100`). The offset is computed
 exactly, for one simulated instant, so it shows gPTP's own accuracy and not
 the time it takes to read two clocks.
 
@@ -96,9 +96,27 @@ host clock, the same number on both sides once locked, and logs to
 discovery of the other shows up after up to about 15 s (the standard's
 random advertising delay). `tests/e2e/two_devices.sh` checks both.
 
-Add `--audio` to both to stream audio from a to b (AAF, 48 kHz, reserved
-with SRP); b reports frames received and gaps every second. Experimental:
-it loses data in real time on a host (see the roadmap).
+### Virtual time
+
+`--virtual` runs the simulation in virtual time (decision 0013): time stands
+still while the stack has work and jumps to the next event when it is idle,
+so every timer fires exactly on time, whatever the machine's load. Both
+devices of a cable must use it; they then advance in lockstep. `-t` counts
+simulated seconds; two devices run about 4 times slower than real time, one
+process about as fast as real time.
+
+Add `--audio` to both devices to stream audio from a to b (AAF, 2 channels,
+32 bits, 48 kHz, class A, reserved with SRP); b reports every second the
+frames it received and the gaps:
+
+```sh
+build/host/apps/openpaad-sim/openpaad-sim --virtual --audio --cable demo --side a -t 10 &
+build/host/apps/openpaad-sim/openpaad-sim --virtual --audio --cable demo --side b -t 10
+```
+
+In virtual time every frame arrives (`tests/e2e/audio.sh`). In real time
+the stream loses data: FreeRTOS on a host cannot keep GenAVB's 125 us
+network period.
 
 ## Flashing (Phase 2)
 

@@ -45,7 +45,7 @@ with:
 | Reference endpoint image (boot header, FreeRTOS, full AVB stack init) | links; not yet run on a board |
 | Reproducible firmware | same commit, same `.bin`, on any machine |
 | All GenAVB protocol code built for the host | builds, `-Wall -Werror` |
-| Full GenAVB stack on simulated hardware (`openpaad-sim`, Linux and macOS) | runs; two simulated devices, one process each, lock gPTP to within a few nanoseconds and discover each other with ATDECC, checked in CI |
+| Full GenAVB stack on simulated hardware (`openpaad-sim`, Linux and macOS) | runs, in real or virtual time; two simulated devices, one process each, lock gPTP to within a few nanoseconds, discover each other with ATDECC and stream audio without losing a frame, checked in CI |
 | Stream Tspec and bandwidth per Milan v1.3 Table 4.4 | implemented and tested (`paad/`) |
 | Requirement matrix v0 | 100 rows, 7 confirmed gaps in GenAVB 7.6.2 |
 

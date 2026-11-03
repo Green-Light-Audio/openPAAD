@@ -107,6 +107,13 @@ int paad_sim_world_run_for(struct paad_sim_world *world, uint64_t duration_ns);
  * or until the wake hook fires, then call again. Any mode. */
 uint64_t paad_sim_world_run_pending(struct paad_sim_world *world);
 
+/** Source time of the next timer expiry or event (UINT64_MAX if none). */
+uint64_t paad_sim_world_next_event(struct paad_sim_world *world);
+
+/** Virtual time: move the time forward to source_ns without running
+ * anything (the caller runs what is due, e.g. with run_pending). */
+void paad_sim_world_advance(struct paad_sim_world *world, uint64_t source_ns);
+
 /** Have fn(arg) called on every paad_sim_world_run_pending(), before the
  * events due run: for simulated hardware fed from outside the process (a
  * cable to another process). The runner then wakes at least every tick. */

@@ -149,6 +149,28 @@ int paad_sim_world_run_until(struct paad_sim_world *world, uint64_t source_ns)
 	return PAAD_HAL_OK;
 }
 
+uint64_t paad_sim_world_next_event(struct paad_sim_world *world)
+{
+	struct due d;
+
+	sim_lock(&world->lock);
+	d = next_due(world);
+	sim_unlock(&world->lock);
+
+	return d.kind == DUE_NONE ? UINT64_MAX : d.source_ns;
+}
+
+void paad_sim_world_advance(struct paad_sim_world *world, uint64_t source_ns)
+{
+	if (world->mode != PAAD_SIM_VIRTUAL_TIME)
+		return;
+
+	sim_lock(&world->lock);
+	if (source_ns > world->virtual_now)
+		__atomic_store_n(&world->virtual_now, source_ns, __ATOMIC_RELEASE);
+	sim_unlock(&world->lock);
+}
+
 int paad_sim_world_add_poller(struct paad_sim_world *world, void (*fn)(void *arg), void *arg)
 {
 	if (world->num_pollers >= PAAD_SIM_MAX_POLLERS)

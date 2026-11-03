@@ -6,6 +6,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -79,6 +80,7 @@ enum cable_type {
 	CABLE_HELLO = 1,
 	CABLE_BYE,
 	CABLE_FRAME,
+	CABLE_NEXT, /* first: our next event time; last: frames received from the peer */
 };
 
 /* Same host, same build: native byte order. */
@@ -327,6 +329,8 @@ static int sim_transmit(struct paad_hal_eth *hal, unsigned int queue, const stru
 	if (link_up(eth) && eth->remote) {
 		cable_send(eth, CABLE_FRAME, start + eth->propagation_ns, end + eth->propagation_ns, frame->data,
 			   frame->len);
+		eth->arrival[eth->cable_tx % PAAD_SIM_ETH_LOCKSTEP_RING] = end + eth->propagation_ns;
+		eth->cable_tx++;
 		eth->stats.tx_frames++;
 	} else if (link_up(eth)) {
 		f = sim_malloc(sizeof(*f) + frame->len);
@@ -421,6 +425,7 @@ int paad_sim_eth_init(struct paad_sim_eth *eth, struct paad_sim_world *world, st
 	eth->clock = clock;
 	eth->speed_mbps = 1000;
 	eth->sock = -1;
+	eth->sent_next = UINT64_MAX;
 
 	if (pthread_mutex_init(&eth->lock, NULL) != 0)
 		return PAAD_HAL_ERR_IO;
@@ -470,9 +475,17 @@ static void cable_poll(void *arg)
 			break;
 		case CABLE_BYE:
 			eth->peer_up = false;
+			eth->peer_gone = true;
+			break;
+		case CABLE_NEXT:
+			if (hdr.first_bit_ns > eth->peer_next)
+				eth->peer_next = hdr.first_bit_ns;
+			if (hdr.last_bit_ns > eth->acked)
+				eth->acked = hdr.last_bit_ns;
 			break;
 		case CABLE_FRAME:
 			eth->peer_up = true;
+			eth->cable_rx++;
 			if (!eth->started || hdr.len > PAAD_SIM_ETH_MAX_FRAME)
 				break;
 			f = sim_malloc(sizeof(*f) + hdr.len);
@@ -513,6 +526,71 @@ static void cable_poll(void *arg)
 		notify_link(eth);
 }
 
+void paad_sim_eth_lockstep_announce(struct paad_sim_eth *eth, uint64_t next_ns)
+{
+	sim_lock(&eth->lock);
+	if (next_ns != eth->sent_next) {
+		cable_send(eth, CABLE_NEXT, next_ns, eth->cable_rx, NULL, 0);
+		eth->sent_next = next_ns;
+	}
+	sim_unlock(&eth->lock);
+}
+
+uint64_t paad_sim_eth_lockstep_horizon(struct paad_sim_eth *eth)
+{
+	uint64_t earliest;
+
+	sim_lock(&eth->lock);
+	if (eth->peer_gone) {
+		earliest = UINT64_MAX;
+	} else {
+		earliest = eth->peer_next;
+		/* The peer has not seen these frames yet: it may answer them
+		 * as soon as they arrive. */
+		if (eth->cable_tx > eth->acked) {
+			uint64_t first = eth->arrival[eth->acked % PAAD_SIM_ETH_LOCKSTEP_RING];
+
+			if (eth->cable_tx - eth->acked >= PAAD_SIM_ETH_LOCKSTEP_RING)
+				first = 0; /* too far ahead: wait for the peer */
+			if (first < earliest)
+				earliest = first;
+		}
+		earliest = earliest + eth->propagation_ns;
+	}
+	sim_unlock(&eth->lock);
+
+	return earliest;
+}
+
+void paad_sim_eth_lockstep_wait(struct paad_sim_eth *eth, int timeout_ms)
+{
+	struct pollfd pfd = { .fd = eth->sock, .events = POLLIN };
+	int rc;
+
+	if (eth->peer_gone)
+		return;
+
+	rc = poll(&pfd, 1, timeout_ms);
+	if (rc == 0) {
+		sim_lock(&eth->lock);
+		eth->peer_gone = true; /* silent for too long: run alone */
+		sim_unlock(&eth->lock);
+		return;
+	}
+
+	cable_poll(eth);
+}
+
+void paad_sim_eth_cable_bye(struct paad_sim_eth *eth)
+{
+	if (!eth->remote)
+		return;
+
+	sim_lock(&eth->lock);
+	cable_send(eth, CABLE_BYE, 0, 0, NULL, 0);
+	sim_unlock(&eth->lock);
+}
+
 int paad_sim_eth_connect_socket(struct paad_sim_eth *eth, const char *local_path, const char *peer_path,
 				uint32_t propagation_ns)
 {
@@ -520,7 +598,7 @@ int paad_sim_eth_connect_socket(struct paad_sim_eth *eth, const char *local_path
 	int size = 1 << 20;
 	int fd;
 
-	if (eth->peer || eth->remote || eth->world->mode != PAAD_SIM_REAL_TIME ||
+	if (eth->peer || eth->remote ||
 	    strlen(local_path) >= sizeof(addr.sun_path) || strlen(peer_path) >= sizeof(eth->peer_path))
 		return PAAD_HAL_ERR_INVALID;
 

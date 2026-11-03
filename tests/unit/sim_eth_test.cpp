@@ -433,3 +433,37 @@ TEST_F(SimEthCableTest, FramesKeepExactTimestamps)
 	uint64_t received = paad_sim_clock_source_at(&clock[1], rx.timestamp_ns);
 	EXPECT_NEAR(static_cast<double>(received - sent), kPropagationNs, 1.0);
 }
+
+// Lockstep in virtual time: each side may run up to the other's next event,
+// or the arrival of a frame the other has not seen yet, plus the cable delay.
+TEST_F(SimEthCableTest, LockstepHorizon)
+{
+	// (Real-time worlds here: "time" is the host's monotonic clock.)
+	const uint64_t next1 = paad_sim_world_now(&world[0]) + 3600 * kSec;
+	const uint64_t next2 = next1 + 3600 * kSec;
+
+	EXPECT_EQ(paad_sim_eth_lockstep_horizon(&eth[1]), kPropagationNs); // nothing heard yet
+
+	paad_sim_eth_lockstep_announce(&eth[0], next1);
+	ASSERT_TRUE(run_until([&] { return paad_sim_eth_lockstep_horizon(&eth[1]) == next1 + kPropagationNs; }));
+
+	// b sends a frame that reaches a before a's announced next event: a may
+	// answer it, so b's horizon is that arrival until a says it has seen it.
+	ASSERT_EQ(paad_hal_eth_start(&eth[0].hal, kMacA), PAAD_HAL_OK);
+	ASSERT_EQ(paad_hal_eth_start(&eth[1].hal, kMacB), PAAD_HAL_OK);
+	ASSERT_TRUE(run_until([&] { return up(0) && up(1); }));
+	std::vector<uint8_t> f(64, 0);
+	std::memcpy(&f[0], kMacA, 6);
+	paad_hal_eth_frame tx{};
+	tx.data = f.data();
+	tx.len = static_cast<uint16_t>(f.size());
+	ASSERT_EQ(paad_hal_eth_transmit(&eth[1].hal, 0, &tx), PAAD_HAL_OK);
+	EXPECT_LT(paad_sim_eth_lockstep_horizon(&eth[1]), paad_sim_world_now(&world[1]) + kMs);
+
+	ASSERT_TRUE(run_until([&] { return eth[0].stats.rx_frames == 1; })); // a has it
+	paad_sim_eth_lockstep_announce(&eth[0], next2);
+	ASSERT_TRUE(run_until([&] { return paad_sim_eth_lockstep_horizon(&eth[1]) == next2 + kPropagationNs; }));
+
+	paad_sim_eth_cable_bye(&eth[0]);
+	ASSERT_TRUE(run_until([&] { return paad_sim_eth_lockstep_horizon(&eth[1]) == UINT64_MAX; }));
+}

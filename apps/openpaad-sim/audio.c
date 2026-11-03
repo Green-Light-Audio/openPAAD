@@ -14,10 +14,11 @@
  * complement. The listener checks that every frame arrives, in order, and
  * how long before its presentation time it arrives.
  *
- * Experimental (--audio): on a host, FreeRTOS cannot keep GenAVB's 125 us
- * network and media clock period, and GenAVB's gPTP-derived media clock
- * then misses timestamps, so the stream loses data. See docs/roadmap.md
- * (virtual-time simulation).
+ * Run it in virtual time (--virtual): every frame arrives, checked end to
+ * end by tests/e2e/audio.sh. In real time FreeRTOS cannot keep GenAVB's
+ * 125 us network and media clock period on a host, GenAVB's gPTP-derived
+ * media clock then misses timestamps, and the stream loses data
+ * (decision 0013).
  */
 
 #include <inttypes.h>

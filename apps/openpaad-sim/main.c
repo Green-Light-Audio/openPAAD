@@ -16,15 +16,18 @@
  * 20 ppm fast, and must lock onto port 0. Prints port 1's gPTP time minus
  * port 0's every second.
  *
+ * Both run in real time by default, or in virtual time (--virtual).
+ *
  * Device (--cable NAME --side a|b): one process is one device running the
  * full stack on its port 0, cabled to the device of another process on the
  * same host. Side a is grandmaster capable and its clock is exact; side b
  * starts 1000 s away, ticks 20 ppm fast and is not grandmaster capable.
- * Prints the device's gPTP time minus the host clock every second: once
- * locked, both sides print the same value (tests/e2e/two_devices.sh).
+ * Prints the device's gPTP time minus the clock both devices share every
+ * second: once locked, both sides print the same value
+ * (tests/e2e/two_devices.sh).
  *
- * Usage: openpaad-sim [-t seconds] [--check-gptp ns] [--cable NAME --side a|b]
- *                     [-v | --log file]
+ * Usage: openpaad-sim [-t seconds] [--virtual] [--check-gptp ns]
+ *                     [--cable NAME --side a|b [--audio]] [-v | --log file]
  *   -t seconds        run for this long, then exit (default: forever)
  *   --check-gptp ns   bench: exit with status 0 only if, over the last 5
  *                     seconds, port 1's gPTP time stayed within ns of port 0's
@@ -33,8 +36,10 @@
  *   --log file        write GenAVB's log to this file (default:
  *                     openpaad-sim.log, or openpaad-sim-<side>.log)
  *   -v                write GenAVB's log to the terminal instead
- *   --audio           device mode, experimental: an AAF stream from a to b
- *                     (see apps/openpaad-sim/audio.c for its limits)
+ *   --audio           device mode: an AAF stream from a to b
+ *   --virtual         simulate in virtual time (decision 0013): exact timing
+ *                     whatever the host's load; both devices of a cable must
+ *                     use it, and -t counts simulated seconds
  */
 
 #include <inttypes.h>
@@ -50,6 +55,7 @@
 #include "os/clock.h"
 
 #include "paad/sim/console.h"
+#include "paad/sim/eth.h"
 #include "paad/sim/freertos.h"
 #include "paad/sim/platform.h"
 
@@ -73,6 +79,7 @@ static const char *cable_name;
 static char side; /* 'a' or 'b' in device mode */
 static char tag[16] = "openpaad-sim";
 static bool audio_demo;
+static bool virtual_time;
 
 static struct genavb_handle *genavb;
 static struct genavb_config config;
@@ -111,8 +118,8 @@ static int bench_offset(int64_t *offset)
 	return 0;
 }
 
-/* Device: gPTP time minus host time (the source time shared by every
- * process on this host). */
+/* Device: gPTP time minus the clock shared by the simulated devices (the
+ * host's monotonic clock, or virtual time in lockstep). */
 static int device_offset(int64_t *offset)
 {
 	uint64_t now, g;
@@ -133,6 +140,12 @@ static int device_offset(int64_t *offset)
 
 static void finish(int status)
 {
+	struct paad_sim_platform *board = paad_sim_platform();
+
+	/* the other device stops waiting for us */
+	if (cable_name && board)
+		paad_sim_eth_cable_bye(&board->eth[0]);
+
 	paad_sim_console_flush();
 	_exit(status); /* the FreeRTOS scheduler never returns to main() */
 }
@@ -214,7 +227,8 @@ static void main_task(void *arg)
 	}
 
 	if (cable_name)
-		paad_sim_printf("%s: device running on cable %s\n", tag, cable_name);
+		paad_sim_printf("%s: device running on cable %s%s\n", tag, cable_name,
+				virtual_time ? ", virtual time" : "");
 	else
 		paad_sim_printf("%s: stack running, port 0 and port 1 joined by a %u ns cable\n", tag, CABLE_NS);
 
@@ -229,7 +243,7 @@ static void main_task(void *arg)
 			if (device_offset(&offset) < 0)
 				paad_sim_printf("%s: t=%us cannot read the gPTP clock\n", tag, t);
 			else
-				paad_sim_printf("%s: t=%us gPTP - host clock: %" PRId64 " ns\n", tag, t, offset);
+				paad_sim_printf("%s: t=%us gPTP - shared clock: %" PRId64 " ns\n", tag, t, offset);
 			audio_report(tag, t);
 			continue;
 		}
@@ -261,7 +275,7 @@ static void main_task(void *arg)
 static void usage(const char *prog)
 {
 	fprintf(stderr,
-		"usage: %s [-t seconds] [--check-gptp ns] [--cable NAME --side a|b [--audio]] [-v | --log file]\n", prog);
+		"usage: %s [-t seconds] [--virtual] [--check-gptp ns] [--cable NAME --side a|b [--audio]] [-v | --log file]\n", prog);
 	exit(2);
 }
 
@@ -276,14 +290,17 @@ static int build_board(void)
 
 	paad_sim_platform_default_config(&cfg);
 	cfg.cable_ns = CABLE_NS;
+	if (virtual_time)
+		cfg.mode = PAAD_SIM_VIRTUAL_TIME;
 
 	if (cable_name) {
 		cfg.cable = false;
 		for (i = 0; i < PAAD_SIM_PLATFORM_PORTS; i++)
 			cfg.mac[i][5] = (uint8_t)((side == 'a' ? 1 : 2) + 2 * i); /* a: 01, 03; b: 02, 04 */
-		/* Relative to the host clock, so that "gPTP - host clock" stays a
-		 * small number (about 1000 s) whatever the host's uptime. */
-		cfg.initial_ns[0] = paad_sim_monotonic_ns(NULL) + (side == 'a' ? 1000 : 2000) * 1000000000ULL;
+		/* Relative to the shared clock, so that "gPTP - shared clock"
+		 * stays a small number (about 1000 s) whatever the host's uptime. */
+		cfg.initial_ns[0] = (virtual_time ? 0 : paad_sim_monotonic_ns(NULL)) +
+				    (side == 'a' ? 1000 : 2000) * 1000000000ULL;
 		cfg.natural_ppb[0] = side == 'a' ? 0 : 20000;
 	}
 
@@ -297,7 +314,13 @@ static int build_board(void)
 	snprintf(local, sizeof(local), "/tmp/openpaad-%s-%c.sock", cable_name, side);
 	snprintf(peer, sizeof(peer), "/tmp/openpaad-%s-%c.sock", cable_name, side == 'a' ? 'b' : 'a');
 
-	return paad_sim_eth_connect_socket(&board->eth[0], local, peer, CABLE_NS) == PAAD_HAL_OK ? 0 : -1;
+	if (paad_sim_eth_connect_socket(&board->eth[0], local, peer, CABLE_NS) != PAAD_HAL_OK)
+		return -1;
+
+	if (virtual_time)
+		paad_sim_freertos_lockstep(&board->eth[0]);
+
+	return 0;
 }
 
 int main(int argc, char **argv)
@@ -320,6 +343,8 @@ int main(int argc, char **argv)
 			verbose = true;
 		else if (!strcmp(argv[i], "--audio"))
 			audio_demo = true;
+		else if (!strcmp(argv[i], "--virtual"))
+			virtual_time = true;
 		else
 			usage(argv[0]);
 	}

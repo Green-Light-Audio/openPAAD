@@ -4,18 +4,25 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
+#include <sched.h>
 #include <stdint.h>
 
 #include "FreeRTOS.h"
 #include "task.h"
 
 #include "paad/hal/common.h"
+#include "paad/sim/eth.h"
 #include "paad/sim/freertos.h"
 #include "paad/sim/hooks.h"
 
-#define IRQ_TASK_STACK (configMINIMAL_STACK_SIZE * 4)
+#define IRQ_TASK_STACK      (configMINIMAL_STACK_SIZE * 4)
+#define TICK_NS             (1000000000ULL / configTICK_RATE_HZ)
+#define PEER_TIMEOUT_MS     10000
 
 static TaskHandle_t irq_task_handle;
+static struct paad_sim_world *sim_world;
+static struct paad_sim_eth *lockstep_eth;
+static uint64_t tick_base; /* simulated time of FreeRTOS tick 0 */
 
 static void critical_enter(void)
 {
@@ -40,11 +47,8 @@ static void wake_irq_task(void *arg)
 		vTaskNotifyGiveFromISR(irq_task_handle, &woken);
 }
 
-static void irq_task(void *arg)
+static void irq_task_real_time(struct paad_sim_world *world)
 {
-	struct paad_sim_world *world = arg;
-	const uint64_t tick_ns = 1000000000ULL / configTICK_RATE_HZ;
-
 	for (;;) {
 		uint64_t next = paad_sim_world_run_pending(world);
 		uint64_t now = paad_sim_world_now(world);
@@ -55,7 +59,7 @@ static void irq_task(void *arg)
 		else if (next <= now)
 			continue;
 		else
-			ticks = (TickType_t)((next - now + tick_ns - 1) / tick_ns);
+			ticks = (TickType_t)((next - now + TICK_NS - 1) / TICK_NS);
 
 		/* Pollers (cables to other processes) need a look every tick. */
 		if (paad_sim_world_has_pollers(world) && ticks > 1)
@@ -65,16 +69,82 @@ static void irq_task(void *arg)
 	}
 }
 
+static void irq_task(void *arg)
+{
+	struct paad_sim_world *world = arg;
+
+	if (world->mode == PAAD_SIM_REAL_TIME)
+		irq_task_real_time(world);
+
+	/* Virtual time: woken by the idle task when an event is due. */
+	for (;;) {
+		paad_sim_world_run_pending(world);
+		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+	}
+}
+
+/* Virtual time, from the idle task: every task is waiting, so move the
+ * simulation to the next thing that happens. */
+static void idle_advance(void)
+{
+	for (;;) {
+		TickType_t ticks = xTaskGetTickCount();
+		uint64_t tick_at = tick_base + ((uint64_t)ticks + 1) * TICK_NS;
+		uint64_t event_at = paad_sim_world_next_event(sim_world);
+		uint64_t next = event_at < tick_at ? event_at : tick_at;
+
+		if (lockstep_eth) {
+			paad_sim_eth_lockstep_announce(lockstep_eth, next);
+			if (next > paad_sim_eth_lockstep_horizon(lockstep_eth)) {
+				/* the other device may still send something
+				 * that lands before then */
+				paad_sim_eth_lockstep_wait(lockstep_eth, PEER_TIMEOUT_MS);
+				continue;
+			}
+		}
+
+		if (event_at <= tick_at) {
+			paad_sim_world_advance(sim_world, event_at);
+			xTaskNotifyGive(irq_task_handle);
+			return;
+		}
+
+		/* A FreeRTOS tick: let the port's tick thread raise it, and wait
+		 * until it has been taken. */
+		paad_sim_world_advance(sim_world, tick_at);
+		paad_sim_freertos_release_tick();
+		while (xTaskGetTickCount() == ticks)
+			sched_yield();
+		return;
+	}
+}
+
+void paad_sim_freertos_lockstep(struct paad_sim_eth *eth)
+{
+	lockstep_eth = eth;
+}
+
 int paad_sim_freertos_start(struct paad_sim_world *world)
 {
 	if (irq_task_handle)
 		return PAAD_HAL_ERR_STATE;
 
+	sim_world = world;
 	paad_sim_set_critical_hooks(critical_enter, critical_exit);
-	paad_sim_world_set_wake_hook(world, wake_irq_task, NULL);
+
+	if (world->mode == PAAD_SIM_REAL_TIME)
+		paad_sim_world_set_wake_hook(world, wake_irq_task, NULL);
 
 	if (xTaskCreate(irq_task, "sim irq", IRQ_TASK_STACK, world, configMAX_PRIORITIES - 1, &irq_task_handle) != pdPASS)
 		return PAAD_HAL_ERR_NO_MEMORY;
+
+	if (world->mode == PAAD_SIM_VIRTUAL_TIME) {
+		taskENTER_CRITICAL();
+		tick_base = paad_sim_world_now(world) - (uint64_t)xTaskGetTickCount() * TICK_NS;
+		taskEXIT_CRITICAL();
+		paad_sim_freertos_set_idle(idle_advance);
+		paad_sim_freertos_gate_ticks(true);
+	}
 
 	return PAAD_HAL_OK;
 }

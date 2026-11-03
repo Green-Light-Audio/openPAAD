@@ -105,6 +105,9 @@ target_include_directories(freertos_posix PUBLIC
 )
 target_link_libraries(freertos_posix PUBLIC Threads::Threads)
 target_compile_options(freertos_posix PRIVATE -w) # third-party code, built as is
+# Virtual time: the port's tick thread sleeps through a gate (src/freertos_hooks.c).
+set_source_files_properties(${_freertos}/portable/ThirdParty/GCC/Posix/port.c
+  PROPERTIES COMPILE_DEFINITIONS "usleep=paad_sim_port_usleep")
 
 # --- GenAVB OS layer and stack tasks on the host -----------------------------------
 # GenAVB's RTOS layer, API and component tasks, built unchanged. NXP hardware
