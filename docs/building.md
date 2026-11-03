@@ -55,13 +55,14 @@ pip3 install west
 | --- | --- | --- |
 | `host` | GenAVB protocol code and openPAAD for the build machine; unit tests | `build/host/` |
 | `evkb-rt1170` | Firmware for the MIMXRT1170-EVKB (Cortex-M7, XIP) | `build/evkb-rt1170/apps/ref-endpoint/openpaad-ref-endpoint.{elf,bin,hex}` |
+| `conformance` | `openpaad-sim` and the ATDECC conformance harness (fetches la_avdecc) | `build/conformance/` |
 
 ```sh
 cmake --preset host && cmake --build --preset host && ctest --preset host
 cmake --preset evkb-rt1170 && cmake --build --preset evkb-rt1170
 ```
 
-`scripts/ci.sh` runs both, exactly as CI does.
+`scripts/ci.sh` runs the three (the conformance stage on Linux only), exactly as CI does.
 
 ## Running the simulator
 
@@ -155,27 +156,29 @@ gPTP-rate clock since recovery locked (`max`: the largest drift since then).
 instead of a cable (decision 0016): its frames go out on that interface, so
 Hive or any other ATDECC controller can discover it, read its entity model
 and connect it. It runs in real time, and needs the right to capture on the
-interface (root, or capture rights such as those Wireshark's ChmodBPF
-gives on macOS).
+interface (root, or capture rights such as those Wireshark's or Hive's
+ChmodBPF gives on macOS). Several devices can share one interface, as on
+one network segment.
 
-Use a pair of virtual interfaces, which make a private network on the
-machine. Several devices can share one end of the pair, as on one network
-segment; the controller goes on the other end. On macOS (feth):
+Hive lists only the machine's Ethernet ports, not virtual interfaces, and
+the interface needs a link: macOS drops what is sent on a port with no
+cable (the Ethernet adapters an Apple Silicon Mac lists without any
+connector stay inactive). On a Mac, use an Ethernet adapter plugged into a
+switch, and put the devices and Hive on the same interface (here `en7`):
 
 ```sh
-sudo ifconfig feth0 create && sudo ifconfig feth1 create
-sudo ifconfig feth0 peer feth1 && sudo ifconfig feth0 up && sudo ifconfig feth1 up
-sudo build/host/apps/openpaad-sim/openpaad-sim --net feth0 --side a --log /tmp/openpaad-sim-a.log &
-sudo build/host/apps/openpaad-sim/openpaad-sim --net feth0 --side b --log /tmp/openpaad-sim-b.log
+sudo build/host/apps/openpaad-sim/openpaad-sim --net en7 --side a --log /tmp/openpaad-sim-a.log &
+sudo build/host/apps/openpaad-sim/openpaad-sim --net en7 --side b --log /tmp/openpaad-sim-b.log
 ```
 
-In Hive, choose the PCap protocol interface and the interface `feth1`: the
-two entities (`openpaad-sim a` and `openpaad-sim b`) appear, and b's audio
-input can be connected to a's audio output (set b's clock source to its
-audio input first, to see its media clock follow the stream). Remove the
-pair with `sudo ifconfig feth0 destroy && sudo ifconfig feth1 destroy`.
+In Hive, choose the PCap protocol and that interface: the two entities
+(`openpaad-sim a` and `openpaad-sim b`) appear, and b's audio input can be
+connected to a's audio output (set b's clock source to its audio input
+first, to see its media clock follow the stream). This recipe has not been
+tried with Hive yet. The devices are then visible to the rest of that
+network, gPTP included.
 
-On Linux, the same with veth:
+On Linux, a veth pair makes a private network on the machine:
 
 ```sh
 sudo ip link add paad0 type veth peer name paad1
@@ -184,12 +187,29 @@ sudo build/host/apps/openpaad-sim/openpaad-sim --net paad0 --side a &
 sudo build/host/apps/openpaad-sim/openpaad-sim --net paad0 --side b
 ```
 
-A physical interface works too, but the devices then talk to that
-network, gPTP announcements included. On a host interface timestamps are
-software ones: gPTP locks to a few microseconds instead of nanoseconds,
-and audio loses frames as in any real-time run. `tests/e2e/net.sh` runs
-two devices and the scripted controller on a veth pair (Linux, root or
+and a controller goes on `paad1`. On a host interface timestamps are
+software ones: gPTP locks to a few microseconds instead of nanoseconds, and
+audio loses frames as in any real-time run. `tests/e2e/net.sh` runs two
+devices and the scripted controller on a veth pair (Linux, root or
 passwordless sudo; skipped otherwise).
+
+### Conformance harness
+
+`tests/conformance` checks the simulated devices from a controller built
+on la_avdecc, the library Hive uses (decision 0017): discovery, entity
+model, lock, names, identify, clock source, notifications to a second
+controller, audio mappings, binding and unbinding. Each check names its
+rows in `docs/requirements/matrix.csv`; a check fails the run only if all
+its rows are marked `implemented` there.
+
+```sh
+cmake --preset conformance && cmake --build --preset conformance && ctest --preset conformance
+```
+
+The preset fetches la_avdecc (LGPL, test only, never linked into firmware)
+and builds only `openpaad-sim` and the harness, in `build/conformance/`. The
+run needs Linux and root or passwordless sudo, like `tests/e2e/net.sh`; CI
+runs it on every commit.
 
 ## Flashing (Phase 2)
 

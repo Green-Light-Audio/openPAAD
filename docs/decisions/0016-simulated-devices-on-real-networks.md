@@ -47,3 +47,8 @@ boards (Phase 2).
 A simulated device on a physical interface puts its frames on that
 network, gPTP announcements included; the documentation recommends
 virtual pairs.
+
+Update, 2026-11-03: Hive does not list virtual interfaces such as feth, and
+macOS drops frames sent on a port without a link, so on a Mac Hive needs an
+Ethernet port with a link. Automated controller checks go through
+la_avdecc instead (decision 0017).

@@ -42,60 +42,60 @@ CLK-004,7.4,Clock quality,Meet the media clock source quality requirements,both,
 CLK-005,7.6.1,Media clock reference,Implement media clock reference priority (default and user),both,yes,partial,P5,sim,GenAVB has the MVU commands; check priority logic
 CLK-006,7.6.2,Media clock domain,Expose and honour the media clock domain,both,yes,unknown,P5,sim,
 AEM-001,5.3.3.1,ENTITY descriptor,Populate the ENTITY descriptor with the required capabilities and fields,both,yes,implemented,P5,unit,
-AEM-002,5.3.3.2,CONFIGURATION,Provide at least one configuration with the required descriptor counts,both,yes,implemented,P5,unit,
-AEM-003,5.3.3.3,AUDIO_UNIT,Provide an AUDIO_UNIT with supported sampling rates,both,yes,implemented,P5,unit,
-AEM-004,5.3.3.4,STREAM_INPUT/OUTPUT,Describe stream inputs and outputs with their formats and flags,both,yes,implemented,P5,unit,
-AEM-005,5.3.3.5,AVB_INTERFACE,Describe the AVB interface including gPTP parameters,both,yes,implemented,P5,unit,
-AEM-006,5.3.3.6,CLOCK_SOURCE,Describe internal and stream clock sources,both,yes,implemented,P5,unit,
-AEM-007,5.3.3.7-9,Stream ports clusters maps,Describe stream ports audio clusters and audio maps,both,yes,implemented,P5,unit,
-AEM-008,5.3.3.11,CLOCK_DOMAIN,Describe the clock domain and its sources,both,yes,implemented,P5,unit,
+AEM-002,5.3.3.2,CONFIGURATION,Provide at least one configuration with the required descriptor counts,both,yes,implemented,P5,conformance,Checked by tests/conformance (la_avdecc)
+AEM-003,5.3.3.3,AUDIO_UNIT,Provide an AUDIO_UNIT with supported sampling rates,both,yes,implemented,P5,conformance,Checked by tests/conformance (la_avdecc)
+AEM-004,5.3.3.4,STREAM_INPUT/OUTPUT,Describe stream inputs and outputs with their formats and flags,both,yes,implemented,P5,conformance,Checked by tests/conformance (la_avdecc)
+AEM-005,5.3.3.5,AVB_INTERFACE,Describe the AVB interface including gPTP parameters,both,yes,implemented,P5,conformance,Checked by tests/conformance (la_avdecc)
+AEM-006,5.3.3.6,CLOCK_SOURCE,Describe internal and stream clock sources,both,yes,implemented,P5,conformance,Checked by tests/conformance (la_avdecc)
+AEM-007,5.3.3.7-9,Stream ports clusters maps,Describe stream ports audio clusters and audio maps,both,yes,implemented,P5,conformance,"Checked by tests/conformance (la_avdecc): the stream port inputs have dynamic mappings, which GenAVB leaves to the application (openpaad-sim keeps them)"
+AEM-008,5.3.3.11,CLOCK_DOMAIN,Describe the clock domain and its sources,both,yes,implemented,P5,conformance,Checked by tests/conformance (la_avdecc)
 AEM-009,5.3.3.12-14,TIMING PTP_INSTANCE PTP_PORT,New 1722.1-2021 timing descriptors as required by v1.3,both,yes,unknown,P5,unit,Check GenAVB support
-AEM-010,5.3.4.1,Locked state,Track the lock owner and expire the lock after 60 s,both,yes,implemented,P5,sim,
+AEM-010,5.3.4.1,Locked state,Track the lock owner and expire the lock after 60 s,both,yes,implemented,P5,sim,Checked by tests/conformance (la_avdecc): lock and unlock (the 60 s expiry is not checked)
 AEM-011,5.3.4.2,Registered controllers,Keep at least 16 registered controllers for notifications,both,yes,unknown,P5,sim,
-AEM-012,5.3.6.3,AVB_INTERFACE counters,Maintain the required interface diagnostic counters,both,yes,partial,P5,sim,
-AEM-013,5.3.7.7,STREAM_OUTPUT counters,Maintain the required stream output counters,talker,yes,partial,P5,sim,
+AEM-012,5.3.6.3,AVB_INTERFACE counters,Maintain the required interface diagnostic counters,both,yes,partial,P5,sim,"Checked by tests/conformance (la_avdecc) that the counters are reported, not which ones"
+AEM-013,5.3.7.7,STREAM_OUTPUT counters,Maintain the required stream output counters,talker,yes,partial,P5,sim,"Checked by tests/conformance (la_avdecc) that the counters are reported, not which ones"
 AEM-014,5.3.7.7.1,Signal presence,Signal presence monitoring on audio channels,talker,optional,unknown,later,,
-AEM-015,5.3.8.10,STREAM_INPUT counters,Maintain the required stream input counters,listener,yes,partial,P5,sim,
-AEM-016,5.3.11.2,CLOCK_DOMAIN counters,Maintain the clock domain counters,both,yes,partial,P5,sim,
+AEM-015,5.3.8.10,STREAM_INPUT counters,Maintain the required stream input counters,listener,yes,partial,P5,sim,"Checked by tests/conformance (la_avdecc) that the counters are reported, not which ones"
+AEM-016,5.3.11.2,CLOCK_DOMAIN counters,Maintain the clock domain counters,both,yes,partial,P5,sim,"Checked by tests/conformance (la_avdecc) that the counters are reported, not which ones"
 AEM-017,5.3.13,User names,Persist user-settable names,both,yes,unknown,P5,hil,Needs non-volatile storage
 CTL-001,5.4.2.1,ACQUIRE_ENTITY,Never grant acquisition (answer not supported),both,yes,implemented,P5,unit,
-CTL-002,5.4.2.2,LOCK_ENTITY,Lock and unlock as specified (ENTITY descriptor only),both,yes,implemented,P5,unit,
+CTL-002,5.4.2.2,LOCK_ENTITY,Lock and unlock as specified (ENTITY descriptor only),both,yes,implemented,P5,conformance,Checked by tests/conformance (la_avdecc)
 CTL-003,5.4.2.3,ENTITY_AVAILABLE,Answer ENTITY_AVAILABLE,both,yes,implemented,P5,unit,
-CTL-004,5.4.2.4,READ_DESCRIPTOR,Answer READ_DESCRIPTOR for every descriptor,both,yes,implemented,P5,unit,
-CTL-005,5.4.2.5-6,SET/GET_CONFIGURATION,Configuration commands,both,yes,implemented,P5,unit,
+CTL-004,5.4.2.4,READ_DESCRIPTOR,Answer READ_DESCRIPTOR for every descriptor,both,yes,implemented,P5,conformance,Checked by tests/conformance (la_avdecc)
+CTL-005,5.4.2.5-6,SET/GET_CONFIGURATION,Configuration commands,both,yes,implemented,P5,conformance,Checked by tests/conformance (la_avdecc)
 CTL-006,5.4.2.7-8,SET/GET_STREAM_FORMAT,Stream format commands,both,yes,implemented,P5,unit,
 CTL-007,5.4.2.9-10,SET/GET_STREAM_INFO,Stream info commands with the per-direction field rules,both,yes,implemented,P5,unit,Field-level rules to verify
-CTL-008,5.4.2.11-12,SET/GET_NAME,Name commands,both,yes,implemented,P5,unit,
+CTL-008,5.4.2.11-12,SET/GET_NAME,Name commands,both,yes,partial,P5,conformance,Checked by tests/conformance (la_avdecc) on the ENTITY descriptor. GET_NAME on the MEMORY_OBJECT descriptor answers BAD_ARGUMENTS (seen 2026-11-03)
 CTL-009,5.4.2.13-14,SET/GET_SAMPLING_RATE,Sampling rate commands,both,yes,implemented,P5,unit,
-CTL-010,5.4.2.15-16,SET/GET_CLOCK_SOURCE,Clock source commands,both,yes,implemented,P5,unit,
-CTL-011,5.4.2.17-18,SET/GET_CONTROL,Control commands (identify control),both,yes,implemented,P5,unit,
-CTL-012,5.4.2.19-20,START/STOP_STREAMING,Start and stop streaming commands,both,yes,implemented,P5,unit,
-CTL-013,5.4.2.21-22,(DE)REGISTER_UNSOLICITED_NOTIFICATION,Unsolicited notification registration,both,yes,implemented,P5,unit,
+CTL-010,5.4.2.15-16,SET/GET_CLOCK_SOURCE,Clock source commands,both,yes,implemented,P5,conformance,Checked by tests/conformance (la_avdecc)
+CTL-011,5.4.2.17-18,SET/GET_CONTROL,Control commands (identify control),both,yes,partial,P5,conformance,"GenAVB handles SET/GET_CONTROL, but the reference entity model openpaad-sim uses has no IDENTIFY control: identify fails (tests/conformance); openPAAD's entity model must add one"
+CTL-012,5.4.2.19-20,START/STOP_STREAMING,Start and stop streaming commands,both,yes,implemented,P5,conformance,Checked by tests/conformance (la_avdecc)
+CTL-013,5.4.2.21-22,(DE)REGISTER_UNSOLICITED_NOTIFICATION,Unsolicited notification registration,both,yes,implemented,P5,conformance,Checked by tests/conformance (la_avdecc)
 CTL-014,5.4.2.23,GET_AVB_INFO,GET_AVB_INFO,both,yes,implemented,P5,unit,
 CTL-015,5.4.2.24,GET_AS_PATH,GET_AS_PATH,both,yes,implemented,P5,unit,
 CTL-016,5.4.2.25,GET_COUNTERS,GET_COUNTERS for every descriptor type with counters,both,yes,implemented,P5,unit,
-CTL-017,5.4.2.26-28,Audio map commands,GET_AUDIO_MAP / ADD_AUDIO_MAPPINGS / REMOVE_AUDIO_MAPPINGS,both,yes,implemented,P5,unit,
-CTL-018,5.4.2.29,GET_DYNAMIC_INFO,Batch read of dynamic state,both,yes,implemented,P5,unit,New in 1722.1-2021
+CTL-017,5.4.2.26-28,Audio map commands,GET_AUDIO_MAP / ADD_AUDIO_MAPPINGS / REMOVE_AUDIO_MAPPINGS,both,yes,implemented,P5,conformance,"GenAVB passes these commands to the application (CONTROLLED channel) and answers ENTITY_MISBEHAVING when none listens; openpaad-sim keeps the mappings and checks them against the model. Checked by tests/conformance (la_avdecc): read, remove, add, refuse a bad one"
+CTL-018,5.4.2.29,GET_DYNAMIC_INFO,Batch read of dynamic state,both,yes,partial,P5,conformance,"New in 1722.1-2021. GenAVB answers it, but answers the sub-commands it does not implement (GET_MEMORY_OBJECT_LENGTH and others) NOT_SUPPORTED with no data; la_avdecc rejects the whole answer and its fast enumeration of the entity fails (found 2026-11-03 with tests/conformance)"
 CTL-019,5.4.2.30-31,SET/GET_MAX_TRANSIT_TIME,Max transit time commands for stream outputs,talker,yes,gap,P5,unit,Missing in GenAVB 7.6.2
 CTL-020,5.4.3,MVU format,Vendor-unique PDU format with the protocol ID and command types,both,yes,implemented,P5,unit,
 CTL-021,5.4.3.4,MVU timeouts,Respect MVU command timeouts,both,yes,unknown,P5,sim,
-CTL-030,5.4.4.1,GET_MILAN_INFO,Report protocol version and specification version; certification version zero when not certified,both,yes,gap,P5,unit,GenAVB hard-codes certification 1.1.0.0; openPAAD must report 0 and spec 1.3
+CTL-030,5.4.4.1,GET_MILAN_INFO,Report protocol version and specification version; certification version zero when not certified,both,yes,gap,P5,conformance,GenAVB hard-codes certification 1.1.0.0; openPAAD must report 0 and spec 1.3. tests/conformance reads specification version 1.2
 CTL-031,5.4.4.2-3,SET/GET_SYSTEM_UNIQUE_ID,System unique ID commands,both,yes,implemented,P5,unit,
 CTL-032,5.4.4.4-5,SET/GET_MEDIA_CLOCK_REFERENCE_INFO,Media clock reference info commands,both,yes,implemented,P5,unit,
 CTL-033,5.4.4.6,BIND_STREAM,MVU BIND_STREAM,listener,yes,gap,P5,sim,New in v1.3; missing in GenAVB 7.6.2
 CTL-034,5.4.4.7,UNBIND_STREAM,MVU UNBIND_STREAM,listener,yes,gap,P5,sim,New in v1.3; missing in GenAVB 7.6.2
 CTL-035,5.4.4.8,GET_STREAM_INPUT_INFO_EX,MVU GET_STREAM_INPUT_INFO_EX,listener,yes,gap,P5,unit,New in v1.3; missing in GenAVB 7.6.2
-NTF-001,5.4.5.1-3,Unsolicited notifications,Send the listed AEM and MVU unsolicited notifications,both,yes,partial,P5,sim,
+NTF-001,5.4.5.1-3,Unsolicited notifications,Send the listed AEM and MVU unsolicited notifications,both,yes,partial,P5,sim,tests/conformance: a second registered controller hears of a clock source change
 NTF-002,5.4.5.4,Departing controllers,Detect departed controllers and drop their registrations,both,yes,unknown,P5,sim,
 NTF-003,5.4.5.5,Identification,Identification notification,both,yes,unknown,P5,sim,
-ACMP-001,5.5.1.2-3,Binding and settlement,Separate binding (persistent) from settlement (probing),listener,yes,implemented,P5,sim,Exercised end to end in openpaad_sim_audio: bind; probe; settle; unbind; rebind
+ACMP-001,5.5.1.2-3,Binding and settlement,Separate binding (persistent) from settlement (probing),listener,yes,implemented,P5,sim,Exercised end to end in openpaad_sim_audio: bind; probe; settle; unbind; rebind. Checked by tests/conformance (la_avdecc)
 ACMP-002,5.5.1.4,Auto connect,Auto-connect behaviour,listener,optional,unknown,later,,
 ACMP-003,5.5.2.3,ACMP timeouts,Respect ACMP command timeouts,both,yes,implemented,P5,unit,Code reading 2026-11-03: 200 ms for every command of Table 5.26
-ACMP-004,5.5.3,Listener state machine,Implement the listener sink state machine (UNBOUND to SETTLED states) including MVU events,listener,yes,partial,P5,sim,MVU-triggered transitions missing until CTL-033/034. Code reading 2026-11-03: same eight states and the same events; TMR_RETRY 4 s; TMR_NO_TK 10 s; TMR_DELAY 0.2 to 1 s (inside the specified range)
-ACMP-005,5.5.4.1,PROBE_TX_COMMAND,Talker handling of PROBE_TX_COMMAND,talker,yes,implemented,P5,sim,Exercised end to end in openpaad_sim_audio
-ACMP-006,5.5.4.2,DISCONNECT_TX_COMMAND,Talker handling of DISCONNECT_TX_COMMAND,talker,yes,implemented,P5,sim,
+ACMP-004,5.5.3,Listener state machine,Implement the listener sink state machine (UNBOUND to SETTLED states) including MVU events,listener,yes,partial,P5,sim,MVU-triggered transitions missing until CTL-033/034. Code reading 2026-11-03: same eight states and the same events; TMR_RETRY 4 s; TMR_NO_TK 10 s; TMR_DELAY 0.2 to 1 s (inside the specified range). tests/conformance: GET_RX_STATE while bound
+ACMP-005,5.5.4.1,PROBE_TX_COMMAND,Talker handling of PROBE_TX_COMMAND,talker,yes,implemented,P5,sim,Exercised end to end in openpaad_sim_audio. Checked by tests/conformance (la_avdecc)
+ACMP-006,5.5.4.2,DISCONNECT_TX_COMMAND,Talker handling of DISCONNECT_TX_COMMAND,talker,yes,implemented,P5,sim,Checked by tests/conformance (la_avdecc): unbinding closes the talker side
 ACMP-007,5.5.4.3-4,GET_TX_STATE/GET_TX_CONNECTION,Talker state queries,talker,yes,implemented,P5,sim,
-ADP-001,5.6.2,ADPDU content,Advertise with the required ADPDU field values (valid time 10),both,yes,implemented,P5,unit,
-ADP-002,5.6.3,Advertise state machine,Advertise periodically with randomised delays; react to link and grandmaster changes,both,yes,implemented,P5,sim,Code reading 2026-11-03: random delay 0.1 to 2 s at startup and 0.1 to 4 s otherwise; advertise every 5 s: matches v1.3
+ADP-001,5.6.2,ADPDU content,Advertise with the required ADPDU field values (valid time 10),both,yes,partial,P5,conformance,"tests/conformance: valid time 10 only once the application sets Milan's value (openpaad-sim does; GenAVB's RTOS default gives 31); the identify control index is not advertised, the reference entity model having no IDENTIFY control"
+ADP-002,5.6.3,Advertise state machine,Advertise periodically with randomised delays; react to link and grandmaster changes,both,yes,implemented,P5,sim,Code reading 2026-11-03: random delay 0.1 to 2 s at startup and 0.1 to 4 s otherwise; advertise every 5 s: matches v1.3. Checked by tests/conformance (la_avdecc): both devices discovered
 ADP-003,5.6.4,Listener discovery,Track talker discovery and departure per sink,listener,yes,implemented,P5,sim,
 RED-001,8,Seamless network redundancy,Redundant pairs of interfaces and streams,both,no,partial,later,interop,Not in 1.0

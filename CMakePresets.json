@@ -22,13 +22,31 @@
         "OPENPAAD_BOARD": "host",
         "CMAKE_BUILD_TYPE": "Debug"
       }
+    },
+    {
+      "name": "conformance",
+      "displayName": "Host: ATDECC conformance harness (fetches la_avdecc, test only)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/conformance",
+      "cacheVariables": {
+        "OPENPAAD_BOARD": "host",
+        "CMAKE_BUILD_TYPE": "Debug",
+        "OPENPAAD_CONFORMANCE": "ON"
+      }
     }
   ],
   "buildPresets": [
     { "name": "evkb-rt1170", "configurePreset": "evkb-rt1170" },
-    { "name": "host", "configurePreset": "host" }
+    { "name": "host", "configurePreset": "host" },
+    { "name": "conformance", "configurePreset": "conformance", "targets": ["openpaad-sim", "openpaad-conformance"] }
   ],
   "testPresets": [
-    { "name": "host", "configurePreset": "host", "output": { "outputOnFailure": true } }
+    { "name": "host", "configurePreset": "host", "output": { "outputOnFailure": true } },
+    {
+      "name": "conformance",
+      "configurePreset": "conformance",
+      "output": { "outputOnFailure": true, "verbosity": "verbose" },
+      "filter": { "include": { "label": "conformance" } }
+    }
   ]
 }

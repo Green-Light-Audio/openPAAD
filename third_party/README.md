@@ -7,6 +7,9 @@
 Other dependencies (MCUXpresso SDK, FreeRTOS kernel, NXP RTOS abstraction
 layer, NXP rtos-apps) are fetched by west at the commits pinned in
 `west.yml` and are not part of this repository.
+The conformance harness (`tests/conformance`, decision 0017) fetches
+la_avdecc (LGPL-3.0) at a pinned release when built with the `conformance`
+preset; it is a test-only dependency, never linked into firmware.
 
 ## Local changes to GenAVB
 

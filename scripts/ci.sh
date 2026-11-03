@@ -9,6 +9,13 @@ cmake --preset host
 cmake --build --preset host
 ctest --preset host
 
+if [ "$(uname -s)" = Linux ]; then
+  echo "== conformance: la_avdecc controller against simulated devices"
+  cmake --preset conformance
+  cmake --build --preset conformance
+  ctest --preset conformance
+fi
+
 echo "== firmware: MIMXRT1170-EVKB"
 if [ -z "${ARMGCC_DIR:-}" ] && ! command -v arm-none-eabi-gcc >/dev/null; then
   echo "ARMGCC_DIR not set and arm-none-eabi-gcc not on PATH" >&2
