@@ -221,7 +221,9 @@ int genavb_stream_enable_callback(struct genavb_stream_handle const *handle)
 int genavb_stream_send(struct genavb_stream_handle const *handle, void const *data,
 	unsigned int data_len, struct genavb_event const *event, unsigned int event_len)
 {
-	struct genavb_iovec data_iov;
+	/* media_api_write() reads one entry past the last: give it the
+	 * safeguard entry it expects. */
+	struct genavb_iovec data_iov[2] = { 0 };
 	int rc;
 
 	if (unlikely(!handle)) {
@@ -234,10 +236,10 @@ int genavb_stream_send(struct genavb_stream_handle const *handle, void const *da
 		goto err;
 	}
 
-	data_iov.iov_base = (void *)data; /* We need to remove the const qualifier here, or we would need to define 2 separate iovec structures for tx/rx. */
-	data_iov.iov_len = data_len;
+	data_iov[0].iov_base = (void *)data; /* We need to remove the const qualifier here, or we would need to define 2 separate iovec structures for tx/rx. */
+	data_iov[0].iov_len = data_len;
 
-	rc = media_api_write((struct media_queue *)&handle->mqueue, &data_iov, 1, event, event_len);
+	rc = media_api_write((struct media_queue *)&handle->mqueue, data_iov, 1, event, event_len);
 	if (rc < 0)
 		return (-GENAVB_ERR_STREAM_TX);
 
