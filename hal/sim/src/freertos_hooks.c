@@ -9,6 +9,7 @@
 
 #include <pthread.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -68,6 +69,40 @@ int paad_sim_port_usleep(useconds_t us)
 	return 0;
 }
 
+/* Real time: the tick thread sleeps one period between ticks, whatever time
+ * the tick itself took, and a busy host makes it oversleep. FreeRTOS time
+ * then falls behind the host's, by 15 % on an idle Linux machine and more on
+ * a loaded one, and so does everything timed in ticks: GenAVB's system
+ * timers, such as ATDECC's advertising delays. Put the missing ticks back,
+ * so that FreeRTOS time follows the host's clock. */
+#define CATCH_UP_MAX 100 /* ticks per call, to keep each catch-up short */
+
+static void catch_up_ticks(void)
+{
+	static bool started;
+	static uint64_t t0_ns;
+	static TickType_t tick0;
+	struct timespec ts;
+	uint64_t now_ns;
+	TickType_t expected;
+	int32_t behind;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	now_ns = (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+
+	if (!started) {
+		started = true;
+		t0_ns = now_ns;
+		tick0 = xTaskGetTickCount();
+		return;
+	}
+
+	expected = (TickType_t)(tick0 + (now_ns - t0_ns) * configTICK_RATE_HZ / 1000000000ULL);
+	behind = (int32_t)(expected - xTaskGetTickCount());
+	if (behind > 1)
+		xTaskCatchUpTicks((TickType_t)(behind > CATCH_UP_MAX ? CATCH_UP_MAX : behind));
+}
+
 /* With nothing to run, the idle task would spin and keep a host core busy:
  * in real time it sleeps (the tick signal interrupts the sleep); in virtual
  * time it moves the simulation forward instead. */
@@ -75,8 +110,10 @@ void vApplicationIdleHook(void)
 {
 	const struct timespec ts = { 0, 1000000000L / configTICK_RATE_HZ };
 
-	if (idle_fn)
+	if (idle_fn) {
 		idle_fn();
-	else
+	} else {
+		catch_up_ticks();
 		nanosleep(&ts, NULL);
+	}
 }

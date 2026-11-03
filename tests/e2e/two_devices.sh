@@ -62,6 +62,11 @@ id_b=00049fad00020000
 if ! grep -q "adp_discovery_update.*entity : $id_b" "$dir/a.log" ||
    ! grep -q "adp_discovery_update.*entity : $id_a" "$dir/b.log"; then
 	echo "FAIL: the devices did not discover each other"
+	for side in a b; do
+		echo "--- device $side: link and ATDECC advertising"
+		grep -E "link is (UP|DOWN)|adp_discovery_update|adp_advertise_send_packet|adp_discovery_send_packet" \
+			"$dir/$side.log" | head -20
+	done
 	exit 1
 fi
 echo "ATDECC: each device discovered the other"
