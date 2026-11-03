@@ -57,6 +57,10 @@ static void irq_task(void *arg)
 		else
 			ticks = (TickType_t)((next - now + tick_ns - 1) / tick_ns);
 
+		/* Pollers (cables to other processes) need a look every tick. */
+		if (paad_sim_world_has_pollers(world) && ticks > 1)
+			ticks = 1;
+
 		ulTaskNotifyTake(pdTRUE, ticks);
 	}
 }

@@ -4,8 +4,14 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
+#include <errno.h>
+#include <fcntl.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <unistd.h>
 
 #include "paad/sim/eth.h"
 
@@ -57,7 +63,62 @@ uint64_t paad_sim_eth_wire_time_ns(uint16_t len, uint32_t speed_mbps)
 
 static bool link_up(const struct paad_sim_eth *eth)
 {
+	if (eth->remote)
+		return eth->started && eth->peer_up;
+
 	return eth->started && eth->peer && eth->peer->started;
+}
+
+/* --- Cable to another process ---------------------------------------------- */
+
+#define CABLE_MAGIC        0x50414144u /* "PAAD" */
+#define CABLE_HELLO_NS     100000000ULL
+#define CABLE_TIMEOUT_NS   500000000ULL
+
+enum cable_type {
+	CABLE_HELLO = 1,
+	CABLE_BYE,
+	CABLE_FRAME,
+};
+
+/* Same host, same build: native byte order. */
+struct cable_hdr {
+	uint32_t magic;
+	uint16_t type;
+	uint16_t len;
+	uint64_t first_bit_ns; /* source time the first bit reaches the peer */
+	uint64_t last_bit_ns;  /* source time the last bit reaches the peer */
+};
+
+static void cable_send(struct paad_sim_eth *eth, enum cable_type type, uint64_t first, uint64_t last,
+		       const uint8_t *data, uint16_t len)
+{
+	uint8_t buf[sizeof(struct cable_hdr) + PAAD_SIM_ETH_MAX_FRAME];
+	struct cable_hdr hdr = { CABLE_MAGIC, (uint16_t)type, len, first, last };
+	struct sockaddr_un to = { .sun_family = AF_UNIX };
+
+	memcpy(buf, &hdr, sizeof(hdr));
+	if (len)
+		memcpy(buf + sizeof(hdr), data, len);
+	strncpy(to.sun_path, eth->peer_path, sizeof(to.sun_path) - 1);
+
+	/* The peer may not be there (yet): the frame is lost, as on a cable
+	 * plugged into nothing. */
+	(void)sendto(eth->sock, buf, sizeof(hdr) + len, 0, (const struct sockaddr *)&to, sizeof(to));
+}
+
+/* Report a link change if the state differs from the last one reported.
+ * Caller holds the lock; returns true if the HAL user must be told. */
+static bool link_changed(struct paad_sim_eth *eth)
+{
+	bool up = link_up(eth);
+
+	if (up == eth->link_reported)
+		return false;
+
+	eth->link_reported = up;
+
+	return true;
 }
 
 /* Receiver side: called by the world when a frame has fully arrived. */
@@ -135,12 +196,19 @@ static int sim_start(struct paad_hal_eth *hal, const uint8_t addr[PAAD_HAL_ETH_A
 	}
 	memcpy(eth->addr, addr, PAAD_HAL_ETH_ADDR_LEN);
 	eth->started = true;
-	peer_up = eth->peer && eth->peer->started;
+	if (eth->remote) {
+		eth->last_hello = paad_sim_world_now(eth->world);
+		cable_send(eth, CABLE_HELLO, 0, 0, NULL, 0);
+		peer_up = link_changed(eth);
+	} else {
+		peer_up = eth->peer && eth->peer->started;
+	}
 	sim_unlock(&eth->lock);
 
 	if (peer_up) {
 		notify_link(eth);
-		notify_link(eth->peer);
+		if (!eth->remote)
+			notify_link(eth->peer);
 	}
 
 	return PAAD_HAL_OK;
@@ -156,11 +224,16 @@ static void sim_stop(struct paad_hal_eth *hal)
 	eth->started = false;
 	eth->rx_head = 0;
 	eth->rx_count = 0;
+	if (eth->remote) {
+		cable_send(eth, CABLE_BYE, 0, 0, NULL, 0);
+		was_up = link_changed(eth);
+	}
 	sim_unlock(&eth->lock);
 
 	if (was_up) {
 		notify_link(eth);
-		notify_link(eth->peer);
+		if (!eth->remote)
+			notify_link(eth->peer);
 	}
 }
 
@@ -251,7 +324,11 @@ static int sim_transmit(struct paad_hal_eth *hal, unsigned int queue, const stru
 		done->ev.timestamp_ns = paad_sim_clock_at(eth->clock, start);
 	}
 
-	if (link_up(eth)) {
+	if (link_up(eth) && eth->remote) {
+		cable_send(eth, CABLE_FRAME, start + eth->propagation_ns, end + eth->propagation_ns, frame->data,
+			   frame->len);
+		eth->stats.tx_frames++;
+	} else if (link_up(eth)) {
 		f = sim_malloc(sizeof(*f) + frame->len);
 		if (!f) {
 			rc = PAAD_HAL_ERR_NO_MEMORY;
@@ -343,6 +420,7 @@ int paad_sim_eth_init(struct paad_sim_eth *eth, struct paad_sim_world *world, st
 	eth->world = world;
 	eth->clock = clock;
 	eth->speed_mbps = 1000;
+	eth->sock = -1;
 
 	if (pthread_mutex_init(&eth->lock, NULL) != 0)
 		return PAAD_HAL_ERR_IO;
@@ -352,7 +430,124 @@ int paad_sim_eth_init(struct paad_sim_eth *eth, struct paad_sim_world *world, st
 
 void paad_sim_eth_deinit(struct paad_sim_eth *eth)
 {
+	if (eth->sock >= 0)
+		close(eth->sock);
 	pthread_mutex_destroy(&eth->lock);
+}
+
+/* Read what the peer process sent, keep the link state current. Runs from
+ * the world's runner (the simulated interrupt context). */
+static void cable_poll(void *arg)
+{
+	struct paad_sim_eth *eth = arg;
+	uint8_t buf[sizeof(struct cable_hdr) + PAAD_SIM_ETH_MAX_FRAME];
+	uint64_t now = paad_sim_world_now(eth->world);
+	bool notify;
+
+	for (;;) {
+		struct cable_hdr hdr;
+		struct in_flight *f;
+		ssize_t n = recv(eth->sock, buf, sizeof(buf), 0);
+
+		if (n < (ssize_t)sizeof(hdr))
+			break; /* nothing more (EAGAIN), or a runt to ignore */
+
+		memcpy(&hdr, buf, sizeof(hdr));
+		if (hdr.magic != CABLE_MAGIC || n != (ssize_t)(sizeof(hdr) + hdr.len))
+			continue;
+
+		sim_lock(&eth->lock);
+		eth->peer_seen = now;
+		switch (hdr.type) {
+		case CABLE_HELLO:
+			if (!eth->peer_up && eth->started) {
+				/* answer at once, so the peer sees us without waiting
+				 * for our next hello */
+				cable_send(eth, CABLE_HELLO, 0, 0, NULL, 0);
+				eth->last_hello = now;
+			}
+			eth->peer_up = true;
+			break;
+		case CABLE_BYE:
+			eth->peer_up = false;
+			break;
+		case CABLE_FRAME:
+			eth->peer_up = true;
+			if (!eth->started || hdr.len > PAAD_SIM_ETH_MAX_FRAME)
+				break;
+			f = sim_malloc(sizeof(*f) + hdr.len);
+			if (!f)
+				break;
+			f->dst = eth;
+			f->first_bit_source_ns = hdr.first_bit_ns;
+			f->len = hdr.len;
+			memcpy(f->data, buf + sizeof(hdr), hdr.len);
+			/* Usually already due: the frame took longer to cross
+			 * between processes than to cross the cable. Its
+			 * timestamp still comes from first_bit_ns. */
+			if (paad_sim_world_schedule(eth->world, hdr.last_bit_ns > now ? hdr.last_bit_ns : now, deliver, f) !=
+			    PAAD_HAL_OK)
+				sim_free(f);
+			break;
+		default:
+			break;
+		}
+		notify = link_changed(eth);
+		sim_unlock(&eth->lock);
+
+		if (notify)
+			notify_link(eth);
+	}
+
+	sim_lock(&eth->lock);
+	if (eth->started && now - eth->last_hello >= CABLE_HELLO_NS) {
+		cable_send(eth, CABLE_HELLO, 0, 0, NULL, 0);
+		eth->last_hello = now;
+	}
+	if (eth->peer_up && now - eth->peer_seen > CABLE_TIMEOUT_NS)
+		eth->peer_up = false;
+	notify = link_changed(eth);
+	sim_unlock(&eth->lock);
+
+	if (notify)
+		notify_link(eth);
+}
+
+int paad_sim_eth_connect_socket(struct paad_sim_eth *eth, const char *local_path, const char *peer_path,
+				uint32_t propagation_ns)
+{
+	struct sockaddr_un addr = { .sun_family = AF_UNIX };
+	int size = 1 << 20;
+	int fd;
+
+	if (eth->peer || eth->remote || eth->world->mode != PAAD_SIM_REAL_TIME ||
+	    strlen(local_path) >= sizeof(addr.sun_path) || strlen(peer_path) >= sizeof(eth->peer_path))
+		return PAAD_HAL_ERR_INVALID;
+
+	fd = socket(AF_UNIX, SOCK_DGRAM, 0);
+	if (fd < 0)
+		return PAAD_HAL_ERR_IO;
+
+	strncpy(addr.sun_path, local_path, sizeof(addr.sun_path) - 1);
+	unlink(local_path); /* left over by an earlier run */
+	if (bind(fd, (const struct sockaddr *)&addr, sizeof(addr)) < 0 || fcntl(fd, F_SETFL, O_NONBLOCK) < 0) {
+		close(fd);
+		return PAAD_HAL_ERR_IO;
+	}
+
+	/* Room for bursts of frames between two polls (the defaults are a few
+	 * kilobytes on macOS). Best effort. */
+	(void)setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &size, sizeof(size));
+	(void)setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &size, sizeof(size));
+
+	sim_lock(&eth->lock);
+	eth->sock = fd;
+	strncpy(eth->peer_path, peer_path, sizeof(eth->peer_path) - 1);
+	eth->propagation_ns = propagation_ns;
+	eth->remote = true;
+	sim_unlock(&eth->lock);
+
+	return paad_sim_world_add_poller(eth->world, cable_poll, eth);
 }
 
 int paad_sim_eth_connect(struct paad_sim_eth *a, struct paad_sim_eth *b, uint32_t propagation_ns)

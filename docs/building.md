@@ -78,6 +78,24 @@ turns it into a test (CI runs `-t 20 --check-gptp 100`). The offset is computed
 exactly, for one simulated instant, so it shows gPTP's own accuracy and not
 the time it takes to read two clocks.
 
+### Two devices
+
+Each `openpaad-sim` process can also be one device with the full stack,
+cabled to a device in another process on the same machine (UNIX sockets, no
+privileges needed):
+
+```sh
+build/host/apps/openpaad-sim/openpaad-sim --cable demo --side a -t 30 &
+build/host/apps/openpaad-sim/openpaad-sim --cable demo --side b -t 30
+```
+
+Side a is grandmaster capable with an exact clock; side b starts 1000 s
+away, runs 20 ppm fast and locks onto a. Each prints its gPTP time minus the
+host clock, the same number on both sides once locked, and logs to
+`openpaad-sim-a.log` / `openpaad-sim-b.log`, where each device's ATDECC
+discovery of the other shows up after up to about 15 s (the standard's
+random advertising delay). `tests/e2e/two_devices.sh` checks both.
+
 ## Flashing (Phase 2)
 
 The EVKB's on-board MCU-Link probe accepts the `.bin` through its USB mass

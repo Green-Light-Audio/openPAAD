@@ -35,6 +35,7 @@ extern "C" {
 
 #define PAAD_SIM_MAX_TIMERS 64
 #define PAAD_SIM_MAX_EVENTS 1024
+#define PAAD_SIM_MAX_POLLERS 4
 
 enum paad_sim_time_mode {
 	PAAD_SIM_VIRTUAL_TIME,
@@ -72,6 +73,10 @@ struct paad_sim_world {
 
 	void (*wake_hook)(void *arg);
 	void *wake_arg;
+
+	void (*poller[PAAD_SIM_MAX_POLLERS])(void *arg);
+	void *poller_arg[PAAD_SIM_MAX_POLLERS];
+	unsigned int num_pollers;
 };
 
 /** HAL timer on a simulated clock. */
@@ -101,6 +106,12 @@ int paad_sim_world_run_for(struct paad_sim_world *world, uint64_t duration_ns);
  * RTOS task instead of the background thread; wait until the returned time,
  * or until the wake hook fires, then call again. Any mode. */
 uint64_t paad_sim_world_run_pending(struct paad_sim_world *world);
+
+/** Have fn(arg) called on every paad_sim_world_run_pending(), before the
+ * events due run: for simulated hardware fed from outside the process (a
+ * cable to another process). The runner then wakes at least every tick. */
+int paad_sim_world_add_poller(struct paad_sim_world *world, void (*fn)(void *arg), void *arg);
+bool paad_sim_world_has_pollers(const struct paad_sim_world *world);
 
 /** fn(arg) is called whenever an event or a timer is added, from the
  * caller's context and without simulator locks held. */

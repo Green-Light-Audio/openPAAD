@@ -15,3 +15,8 @@ target_compile_options(openpaad-sim PRIVATE -Wall -Wextra -Werror)
 # End to end: GenAVB's gPTP must bring port 1's clock onto port 0's.
 add_test(NAME openpaad_sim_gptp_sync COMMAND openpaad-sim -t 20 --check-gptp 100)
 set_tests_properties(openpaad_sim_gptp_sync PROPERTIES TIMEOUT 90 LABELS e2e)
+
+# End to end: two devices, one process each, joined by a virtual cable.
+add_test(NAME openpaad_sim_two_devices
+  COMMAND sh ${CMAKE_SOURCE_DIR}/tests/e2e/two_devices.sh $<TARGET_FILE:openpaad-sim> 25 100)
+set_tests_properties(openpaad_sim_two_devices PROPERTIES TIMEOUT 120 LABELS e2e)

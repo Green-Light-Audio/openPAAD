@@ -15,6 +15,9 @@
  * the receiver's address list. This is enough for gPTP peer delay, SRP,
  * MAAP, ATDECC and AVTP to run between two simulated endpoints.
  *
+ * A port can also be cabled to a port of another process on the same host
+ * (paad_sim_eth_connect_socket), so that each process is one device.
+ *
  * Limits: one link per port (no simulated bridge yet); transmit queues are
  * served in order of submission, and shaper settings are recorded but not
  * enforced.
@@ -75,6 +78,15 @@ struct paad_sim_eth {
 	unsigned int rx_count;
 
 	struct paad_sim_eth_stats stats;
+
+	/* Cable to a port of another process (paad_sim_eth_connect_socket) */
+	bool remote;
+	int sock;
+	bool peer_up;
+	bool link_reported;
+	uint64_t peer_seen;  /**< source time of the last message from the peer */
+	uint64_t last_hello; /**< source time of the last hello sent */
+	char peer_path[104];
 };
 
 int paad_sim_eth_init(struct paad_sim_eth *eth, struct paad_sim_world *world, struct paad_sim_clock *clock,
@@ -84,6 +96,15 @@ void paad_sim_eth_deinit(struct paad_sim_eth *eth);
 /** Join two ports with a cable: propagation delay in ns (about 5 ns per
  * metre of copper, plus PHY delays), 1 Gbit/s full duplex. */
 int paad_sim_eth_connect(struct paad_sim_eth *a, struct paad_sim_eth *b, uint32_t propagation_ns);
+
+/** Join this port to a port of another process on the same host, through a
+ * datagram socket bound at local_path that sends to peer_path. Frames carry
+ * their simulated timing: both processes share the host's monotonic clock,
+ * so the world must run in real time. The peer is up while it sends
+ * (hellos every 100 ms, gone after 500 ms of silence). The world polls the
+ * socket (paad_sim_world_add_poller() is done here). */
+int paad_sim_eth_connect_socket(struct paad_sim_eth *eth, const char *local_path, const char *peer_path,
+				uint32_t propagation_ns);
 
 /** Time a frame of len bytes (no FCS) occupies the wire, in ns, including
  * padding, FCS, preamble and inter-packet gap. */

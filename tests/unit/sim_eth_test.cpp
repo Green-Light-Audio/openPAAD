@@ -10,7 +10,10 @@
 
 #include <cstdint>
 #include <cstring>
+#include <string>
 #include <vector>
+
+#include <unistd.h>
 
 #include <gtest/gtest.h>
 
@@ -321,4 +324,112 @@ TEST_F(SimEthTest, PeerDelayMeasuresPropagation)
 
 	double delay = (static_cast<double>(t4 - t1) - static_cast<double>(t3 - t2) / ratio) / 2.0;
 	EXPECT_NEAR(delay, kPropagationNs, 2.0);
+}
+
+// Cable between two processes: here two worlds in one process, each port on
+// its own socket, as two openpaad-sim devices would be. Real time.
+namespace {
+
+class SimEthCableTest : public ::testing::Test {
+protected:
+	void SetUp() override
+	{
+		for (int i = 0; i < 2; i++) {
+			path[i] = "/tmp/openpaad-test-" + std::to_string(getpid()) + (i ? "-b.sock" : "-a.sock");
+			ASSERT_EQ(paad_sim_world_init(&world[i], PAAD_SIM_REAL_TIME), PAAD_HAL_OK);
+			ASSERT_EQ(paad_sim_clock_init(&clock[i], paad_sim_world_now, &world[i], (i + 1) * 1000 * kSec,
+						      i ? 30000 : 0),
+				  PAAD_HAL_OK);
+			ASSERT_EQ(paad_sim_eth_init(&eth[i], &world[i], &clock[i], i ? "b" : "a"), PAAD_HAL_OK);
+			eth[i].hal.event_cb = Events::cb;
+			eth[i].hal.event_arg = &ev[i];
+		}
+		ASSERT_EQ(paad_sim_eth_connect_socket(&eth[0], path[0].c_str(), path[1].c_str(), kPropagationNs), PAAD_HAL_OK);
+		ASSERT_EQ(paad_sim_eth_connect_socket(&eth[1], path[1].c_str(), path[0].c_str(), kPropagationNs), PAAD_HAL_OK);
+	}
+
+	void TearDown() override
+	{
+		for (int i = 0; i < 2; i++) {
+			paad_sim_eth_deinit(&eth[i]);
+			paad_sim_clock_deinit(&clock[i]);
+			paad_sim_world_deinit(&world[i]);
+			unlink(path[i].c_str());
+		}
+	}
+
+	// Run both worlds until cond() holds, for at most 2 s.
+	template <typename F> bool run_until(F cond)
+	{
+		for (int n = 0; n < 2000; n++) {
+			paad_sim_world_run_pending(&world[0]);
+			paad_sim_world_run_pending(&world[1]);
+			if (cond())
+				return true;
+			usleep(1000);
+		}
+		return false;
+	}
+
+	bool up(int i)
+	{
+		paad_hal_eth_link link{};
+		paad_hal_eth_get_link(&eth[i].hal, &link);
+		return link.up;
+	}
+
+	std::string path[2];
+	paad_sim_world world[2]{};
+	paad_sim_clock clock[2]{};
+	paad_sim_eth eth[2]{};
+	Events ev[2];
+};
+
+} // namespace
+
+TEST_F(SimEthCableTest, LinkFollowsThePeer)
+{
+	EXPECT_TRUE(paad_sim_world_has_pollers(&world[0]));
+	ASSERT_EQ(paad_hal_eth_start(&eth[0].hal, kMacA), PAAD_HAL_OK);
+	EXPECT_FALSE(run_until([&] { return up(0); })); // nobody at the other end
+
+	ASSERT_EQ(paad_hal_eth_start(&eth[1].hal, kMacB), PAAD_HAL_OK);
+	ASSERT_TRUE(run_until([&] { return up(0) && up(1); }));
+	EXPECT_EQ(ev[0].count(PAAD_HAL_ETH_EV_LINK), 1u);
+	EXPECT_EQ(ev[1].count(PAAD_HAL_ETH_EV_LINK), 1u);
+
+	paad_hal_eth_stop(&eth[1].hal); // says goodbye
+	ASSERT_TRUE(run_until([&] { return !up(0); }));
+	EXPECT_EQ(ev[0].count(PAAD_HAL_ETH_EV_LINK), 2u);
+}
+
+TEST_F(SimEthCableTest, FramesKeepExactTimestamps)
+{
+	ASSERT_EQ(paad_hal_eth_start(&eth[0].hal, kMacA), PAAD_HAL_OK);
+	ASSERT_EQ(paad_hal_eth_start(&eth[1].hal, kMacB), PAAD_HAL_OK);
+	ASSERT_TRUE(run_until([&] { return up(0) && up(1); }));
+
+	std::vector<uint8_t> f(100, 0x42);
+	std::memcpy(&f[0], kMacB, 6);
+	std::memcpy(&f[6], kMacA, 6);
+	paad_hal_eth_frame tx{};
+	tx.data = f.data();
+	tx.len = static_cast<uint16_t>(f.size());
+	tx.flags = PAAD_HAL_ETH_F_TX_TIMESTAMP;
+	tx.cookie = 7;
+	ASSERT_EQ(paad_hal_eth_transmit(&eth[0].hal, 0, &tx), PAAD_HAL_OK);
+
+	uint8_t buf[PAAD_SIM_ETH_MAX_FRAME];
+	paad_hal_eth_frame rx{};
+	rx.data = buf;
+	ASSERT_TRUE(run_until([&] { return paad_hal_eth_receive(&eth[1].hal, &rx, sizeof(buf)) == 1; }));
+	ASSERT_TRUE(run_until([&] { return ev[0].count(PAAD_HAL_ETH_EV_TX_COMPLETE) == 1; }));
+
+	EXPECT_EQ(std::vector<uint8_t>(buf, buf + rx.len), f);
+
+	// Each side timestamps on its own clock; back on the shared host time
+	// base, the frame took exactly the cable's propagation delay.
+	uint64_t sent = paad_sim_clock_source_at(&clock[0], ev[0].last(PAAD_HAL_ETH_EV_TX_COMPLETE)->timestamp_ns);
+	uint64_t received = paad_sim_clock_source_at(&clock[1], rx.timestamp_ns);
+	EXPECT_NEAR(static_cast<double>(received - sent), kPropagationNs, 1.0);
 }

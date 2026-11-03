@@ -149,9 +149,30 @@ int paad_sim_world_run_until(struct paad_sim_world *world, uint64_t source_ns)
 	return PAAD_HAL_OK;
 }
 
+int paad_sim_world_add_poller(struct paad_sim_world *world, void (*fn)(void *arg), void *arg)
+{
+	if (world->num_pollers >= PAAD_SIM_MAX_POLLERS)
+		return PAAD_HAL_ERR_NO_MEMORY;
+
+	world->poller[world->num_pollers] = fn;
+	world->poller_arg[world->num_pollers] = arg;
+	world->num_pollers++;
+
+	return PAAD_HAL_OK;
+}
+
+bool paad_sim_world_has_pollers(const struct paad_sim_world *world)
+{
+	return world->num_pollers != 0;
+}
+
 uint64_t paad_sim_world_run_pending(struct paad_sim_world *world)
 {
 	struct due d;
+	unsigned int i;
+
+	for (i = 0; i < world->num_pollers; i++)
+		world->poller[i](world->poller_arg[i]);
 
 	run_due(world, paad_sim_world_now(world));
 
