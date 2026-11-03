@@ -33,6 +33,8 @@
  *   --log file        write GenAVB's log to this file (default:
  *                     openpaad-sim.log, or openpaad-sim-<side>.log)
  *   -v                write GenAVB's log to the terminal instead
+ *   --audio           device mode, experimental: an AAF stream from a to b
+ *                     (see apps/openpaad-sim/audio.c for its limits)
  */
 
 #include <inttypes.h>
@@ -51,6 +53,8 @@
 #include "paad/sim/freertos.h"
 #include "paad/sim/platform.h"
 
+#include "audio.h"
+
 /* GenAVB internals: start the management (MAC service) and gPTP instances
  * of a second endpoint port (api/rtos/init.c starts those of the first),
  * and convert a port's hardware time to one of its clocks. */
@@ -68,6 +72,7 @@ static bool verbose;
 static const char *cable_name;
 static char side; /* 'a' or 'b' in device mode */
 static char tag[16] = "openpaad-sim";
+static bool audio_demo;
 
 static struct genavb_handle *genavb;
 static struct genavb_config config;
@@ -195,6 +200,19 @@ static void main_task(void *arg)
 
 	start_stack();
 
+	if (cable_name && audio_demo) {
+		/* Audio demo: a talks, b listens (talker MAC: side a's port 0). */
+		uint8_t talker_mac[6];
+		int rc;
+
+		memcpy(talker_mac, board->cfg.mac[0], 6);
+		talker_mac[5] = 1;
+		rc = side == 'a' ? audio_talker_start(genavb, talker_mac) : audio_listener_start(genavb, talker_mac);
+		if (rc != GENAVB_SUCCESS)
+			paad_sim_printf("%s: audio %s failed: %s\n", tag, side == 'a' ? "talker" : "listener",
+					genavb_strerror(rc));
+	}
+
 	if (cable_name)
 		paad_sim_printf("%s: device running on cable %s\n", tag, cable_name);
 	else
@@ -212,6 +230,7 @@ static void main_task(void *arg)
 				paad_sim_printf("%s: t=%us cannot read the gPTP clock\n", tag, t);
 			else
 				paad_sim_printf("%s: t=%us gPTP - host clock: %" PRId64 " ns\n", tag, t, offset);
+			audio_report(tag, t);
 			continue;
 		}
 
@@ -242,7 +261,7 @@ static void main_task(void *arg)
 static void usage(const char *prog)
 {
 	fprintf(stderr,
-		"usage: %s [-t seconds] [--check-gptp ns] [--cable NAME --side a|b] [-v | --log file]\n", prog);
+		"usage: %s [-t seconds] [--check-gptp ns] [--cable NAME --side a|b [--audio]] [-v | --log file]\n", prog);
 	exit(2);
 }
 
@@ -299,13 +318,17 @@ int main(int argc, char **argv)
 			log_path = argv[++i];
 		else if (!strcmp(argv[i], "-v"))
 			verbose = true;
+		else if (!strcmp(argv[i], "--audio"))
+			audio_demo = true;
 		else
 			usage(argv[0]);
 	}
 
-	if (cable_name && ((side != 'a' && side != 'b') || check_ns >= 0 || strlen(cable_name) > 40 ||
-			   strchr(cable_name, '/'))) {
-		fprintf(stderr, "--cable needs --side a or b and a short name without '/', and no --check-gptp\n");
+	if ((audio_demo && !cable_name) ||
+	    (cable_name && ((side != 'a' && side != 'b') || check_ns >= 0 || strlen(cable_name) > 40 ||
+			   strchr(cable_name, '/')))) {
+		fprintf(stderr, "--cable needs --side a or b and a short name without '/', and no --check-gptp;\n"
+				"--audio needs --cable\n");
 		return 2;
 	}
 

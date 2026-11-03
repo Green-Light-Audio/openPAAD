@@ -1,6 +1,6 @@
 # openpaad-sim: the stack on simulated hardware (host builds only).
 
-add_executable(openpaad-sim main.c)
+add_executable(openpaad-sim main.c audio.c)
 # GenAVB's protocol code, its OS layer and the HAL driver call each other:
 # GNU-style linkers need them in a group; Apple's linker resolves references
 # between archives in any order.

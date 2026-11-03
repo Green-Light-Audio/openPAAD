@@ -34,6 +34,7 @@ Each phase ends on a gate that is a test result, not a date.
 - [x] GenAVB port driver on top of the HAL (`paad/genavb`, GenAVB driver type `HAL_t`), tested inside FreeRTOS on the host
 - [x] `openpaad-sim`: full GenAVB stack on simulated hardware; gPTP locks port 1 to port 0 (end-to-end test in CI)
 - [x] `openpaad-sim`: independent simulated devices in separate processes, joined by a local virtual cable; gPTP lock and ATDECC discovery checked end to end
-- [ ] Simulated media clock and audio
+- [ ] Simulated media clock and audio. First step done: an AAF stream (2 ch, 32 bit, 48 kHz, class A) from one simulated device to another, reserved with SRP and timed by GenAVB's gPTP-derived media clock (`openpaad-sim --audio`, experimental). It loses data: FreeRTOS on a host cannot keep GenAVB's 125 us network and media clock period, and the media clock then misses timestamps.
+- [ ] Virtual-time simulation: the simulator advances time itself, 125 us per tick once every task is idle, and cabled devices advance in lockstep. Exact GenAVB timing whatever the host's load, deterministic CI; real time stays for interoperability with real controllers.
 - [ ] Real-network back-ends (Linux veth, macOS feth/BPF)
 - [ ] Conformance harness, fuzz targets

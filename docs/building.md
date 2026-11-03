@@ -96,6 +96,10 @@ host clock, the same number on both sides once locked, and logs to
 discovery of the other shows up after up to about 15 s (the standard's
 random advertising delay). `tests/e2e/two_devices.sh` checks both.
 
+Add `--audio` to both to stream audio from a to b (AAF, 48 kHz, reserved
+with SRP); b reports frames received and gaps every second. Experimental:
+it loses data in real time on a host (see the roadmap).
+
 ## Flashing (Phase 2)
 
 The EVKB's on-board MCU-Link probe accepts the `.bin` through its USB mass
