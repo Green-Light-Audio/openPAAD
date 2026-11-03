@@ -28,6 +28,12 @@ every task that needs it.
    the simulator computes them from simulated time, not from when a task
    happens to run.
 4. The idle task sleeps until the next tick instead of spinning.
+5. The C library's own locks get the same treatment: console output and the
+   simulator's allocations run with preemption disabled
+   (`hal/sim/src/console.c`, `paad_sim_printf()`), since a task suspended
+   inside `printf()` or `malloc()` would block the next caller for good.
+6. On a busy host FreeRTOS loses ticks; anything that must follow real time
+   is paced by the simulated clock, not by tick counts.
 
 ## Consequences
 

@@ -3,3 +3,6 @@
 compile_commands.json
 *.swp
 .DS_Store
+
+# openpaad-sim default log
+openpaad-sim.log

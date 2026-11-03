@@ -71,7 +71,9 @@ instance whose clock starts 1000 s away and ticks 20 ppm fast.
 build/host/apps/openpaad-sim/openpaad-sim -t 30
 ```
 
-Every second it prints port 1's gPTP time minus port 0's. `--check-gptp <ns>`
+Every second it prints port 1's gPTP time minus port 0's. GenAVB's own log
+goes to `openpaad-sim.log` (`--log <file>` to choose, `-v` to show it in the
+terminal instead). `--check-gptp <ns>`
 turns it into a test (CI runs `-t 20 --check-gptp 100`). The offset is computed
 exactly, for one simulated instant, so it shows gPTP's own accuracy and not
 the time it takes to read two clocks.

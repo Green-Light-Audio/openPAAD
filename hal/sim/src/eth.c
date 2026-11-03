@@ -106,7 +106,7 @@ static void deliver(void *arg, uint64_t source_ns)
 	}
 	sim_unlock(&dst->lock);
 
-	free(f);
+	sim_free(f);
 
 	if (queued)
 		notify(dst, &ev);
@@ -118,7 +118,7 @@ static void complete_tx(void *arg, uint64_t source_ns)
 
 	(void)source_ns;
 	notify(d->eth, &d->ev);
-	free(d);
+	sim_free(d);
 }
 
 /* --- HAL operations ------------------------------------------------------- */
@@ -227,14 +227,14 @@ static int sim_transmit(struct paad_hal_eth *hal, unsigned int queue, const stru
 	if (queue >= PAAD_SIM_ETH_TX_QUEUES || !frame->data || frame->len < 14 || frame->len > PAAD_SIM_ETH_MAX_FRAME)
 		return PAAD_HAL_ERR_INVALID;
 
-	done = calloc(1, sizeof(*done));
+	done = sim_calloc(1, sizeof(*done));
 	if (!done)
 		return PAAD_HAL_ERR_NO_MEMORY;
 
 	sim_lock(&eth->lock);
 	if (!eth->started) {
 		sim_unlock(&eth->lock);
-		free(done);
+		sim_free(done);
 		return PAAD_HAL_ERR_STATE;
 	}
 
@@ -252,7 +252,7 @@ static int sim_transmit(struct paad_hal_eth *hal, unsigned int queue, const stru
 	}
 
 	if (link_up(eth)) {
-		f = malloc(sizeof(*f) + frame->len);
+		f = sim_malloc(sizeof(*f) + frame->len);
 		if (!f) {
 			rc = PAAD_HAL_ERR_NO_MEMORY;
 		} else {
@@ -269,7 +269,7 @@ static int sim_transmit(struct paad_hal_eth *hal, unsigned int queue, const stru
 	/* Delivery once the last bit has reached the peer, completion once it
 	 * has left this port. */
 	if (f && paad_sim_world_schedule(eth->world, end + eth->propagation_ns, deliver, f) != PAAD_HAL_OK) {
-		free(f);
+		sim_free(f);
 		rc = PAAD_HAL_ERR_NO_MEMORY;
 	}
 	if (rc == PAAD_HAL_OK && paad_sim_world_schedule(eth->world, end, complete_tx, done) != PAAD_HAL_OK)
@@ -277,7 +277,7 @@ static int sim_transmit(struct paad_hal_eth *hal, unsigned int queue, const stru
 	sim_unlock(&eth->lock);
 
 	if (rc != PAAD_HAL_OK)
-		free(done);
+		sim_free(done);
 
 	return rc;
 }
