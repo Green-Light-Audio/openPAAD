@@ -16,6 +16,7 @@
 #include "ptp.h"
 
 #include "paad/genavb/hal_port.h"
+#include "paad/hal.h"
 #include "genavb_hal_fixture.h"
 
 static struct net_port test_ports[2];
@@ -76,6 +77,21 @@ void port_link_event(struct net_port *port, bool up, unsigned int speed, unsigne
 	rec.link_speed = speed;
 	rec.link_duplex = duplex;
 	__atomic_add_fetch(&rec.link_events, 1, __ATOMIC_RELEASE);
+}
+
+/* Media clock recovery (mclk_rec.c) needs GenAVB's media clock layer: out
+ * of these tests, covered end to end by openpaad_sim_mclk. */
+int paad_genavb_mclk_rec_init(struct net_port *port, struct paad_hal_mclk *mclk)
+{
+	(void)port;
+	(void)mclk;
+
+	return -1;
+}
+
+void paad_genavb_mclk_rec_exit(struct net_port *port)
+{
+	(void)port;
 }
 
 void gh_reset_record(void)

@@ -45,7 +45,7 @@ with:
 | Reference endpoint image (boot header, FreeRTOS, full AVB stack init) | links; not yet run on a board |
 | Reproducible firmware | same commit, same `.bin`, on any machine |
 | All GenAVB protocol code built for the host | builds, `-Wall -Werror` |
-| Full GenAVB stack on simulated hardware (`openpaad-sim`, Linux and macOS) | runs, in real or virtual time; two simulated devices, one process each, lock gPTP to within a few nanoseconds, discover each other with ATDECC and stream audio without losing a frame, checked in CI |
+| Full GenAVB stack on simulated hardware (`openpaad-sim`, Linux and macOS) | runs, in real or virtual time; two simulated devices, one process each, lock gPTP to within a few nanoseconds, discover each other with ATDECC and stream audio without losing a frame, the listener's audio clock recovered from the stream, checked in CI |
 | Stream Tspec and bandwidth per Milan v1.3 Table 4.4 | implemented and tested (`paad/`) |
 | Requirement matrix v0 | 100 rows, 7 confirmed gaps in GenAVB 7.6.2 |
 
@@ -54,7 +54,7 @@ with:
 | Platform | Role | State |
 | --- | --- | --- |
 | NXP i.MX RT1170 (MIMXRT1170-EVKB) | Reference port | Builds and links; hardware bring-up next |
-| Host simulator (Linux, macOS) | Development and CI | Full stack runs; simulated devices cabled across processes; audio and real-network back-ends next |
+| Host simulator (Linux, macOS) | Development and CI | Full stack runs; simulated devices cabled across processes, streaming audio with media clock recovery; real-network back-ends next |
 | Further ports | Community and partners | After 1.0; see [hal/README.md](hal/README.md) |
 
 ## Quick start

@@ -118,6 +118,19 @@ In virtual time every frame arrives (`tests/e2e/audio.sh`). In real time
 the stream loses data: FreeRTOS on a host cannot keep GenAVB's 125 us
 network period.
 
+Each simulated device also has an audio clock (24.576 MHz, its own
+oscillator error: a +40 ppm, b −30 ppm), recovered by GenAVB (decision
+0014): a's to gPTP, b's to the stream. Both report it every second:
+
+```text
+openpaad-sim[b]: t=10s media clock: locked to stream, adjust +29.998 ppm, error -0.002 ppm, phase -24 ns, max 24 ns, resets 0
+```
+
+`adjust` is the correction GenAVB applies. `error` and `phase` come from the
+simulator, which knows the audio clock exactly: its rate over the last
+second against gPTP time, and how far it has drifted from a perfect
+gPTP-rate clock since recovery locked (`max`: the largest drift since then).
+
 ## Flashing (Phase 2)
 
 The EVKB's on-board MCU-Link probe accepts the `.bin` through its USB mass

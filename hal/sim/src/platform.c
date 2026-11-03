@@ -30,6 +30,8 @@ void paad_sim_platform_default_config(struct paad_sim_platform_config *cfg)
 	}
 	cfg->natural_ppb[0] = 0;
 	cfg->natural_ppb[1] = 20000; /* 20 ppm: crystals are never equal */
+	cfg->mclk = true;
+	cfg->mclk_natural_ppb = -30000; /* nor are audio oscillators */
 }
 
 static int platform_get_mac(unsigned int eth_index, uint8_t mac[PAAD_HAL_ETH_ADDR_LEN])
@@ -77,6 +79,14 @@ int paad_sim_platform_init(const struct paad_sim_platform_config *cfg)
 				return rc;
 			sim.timer_list[n++] = &sim.timer[i][t].hal;
 		}
+	}
+
+	if (cfg->mclk) {
+		rc = paad_sim_mclk_init(&sim.mclk, &sim.world, &sim.clock[0], PAAD_SIM_MCLK_HZ, PAAD_SIM_SAMPLE_RATE,
+					cfg->mclk_natural_ppb);
+		if (rc != PAAD_HAL_OK)
+			return rc;
+		sim.hal.mclk = &sim.mclk.hal;
 	}
 
 	if (cfg->cable) {

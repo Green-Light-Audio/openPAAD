@@ -47,7 +47,9 @@ struct paad_hal_mclk_ops {
 
 	/** Capture the media clock counter when gPTP time reaches ptp_ns; the
 	 * result arrives through capture_cb. Only one capture is pending at a
-	 * time. ISR-safe. Required. */
+	 * time: PAAD_HAL_ERR_BUSY otherwise, and PAAD_HAL_ERR_INVALID if
+	 * ptp_ns has already passed. There is no cancel: a requested capture
+	 * always completes. ISR-safe. Required. */
 	int (*request_capture)(struct paad_hal_mclk *mclk, uint64_t ptp_ns);
 };
 

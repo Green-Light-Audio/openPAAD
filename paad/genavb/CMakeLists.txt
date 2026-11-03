@@ -2,7 +2,7 @@
 # Built against GenAVB's RTOS layer headers and the board's genavb_sdk.h,
 # which the genavb_rtos_<target> library provides.
 
-add_library(paad_genavb_hal STATIC hal_port.c)
+add_library(paad_genavb_hal STATIC hal_port.c mclk_rec.c)
 target_include_directories(paad_genavb_hal PUBLIC include)
 target_link_libraries(paad_genavb_hal PUBLIC paad_hal genavb_rtos_host)
 target_compile_options(paad_genavb_hal PRIVATE -Wall -Wextra -Werror -Wno-unused-parameter
@@ -10,3 +10,6 @@ target_compile_options(paad_genavb_hal PRIVATE -Wall -Wextra -Werror -Wno-unused
 if(CMAKE_C_COMPILER_ID MATCHES "Clang")
   target_compile_options(paad_genavb_hal PRIVATE -Wno-gnu-variable-sized-type-not-at-end)
 endif()
+# mclk_rec.c includes GenAVB's shared recovery code, built as is (it takes
+# abs() of unsigned differences, correct through the conversion to int).
+set_source_files_properties(mclk_rec.c PROPERTIES COMPILE_OPTIONS "-Wno-absolute-value")

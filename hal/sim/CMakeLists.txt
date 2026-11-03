@@ -71,6 +71,7 @@ add_library(paad_hal_sim STATIC
   src/clock.c
   src/world.c
   src/eth.c
+  src/mclk.c
 )
 target_include_directories(paad_hal_sim PUBLIC include)
 target_link_libraries(paad_hal_sim PUBLIC paad_hal Threads::Threads)

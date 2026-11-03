@@ -19,6 +19,7 @@
 #include "paad/hal/platform.h"
 #include "paad/sim/clock.h"
 #include "paad/sim/eth.h"
+#include "paad/sim/mclk.h"
 #include "paad/sim/world.h"
 
 #ifdef __cplusplus
@@ -27,6 +28,8 @@ extern "C" {
 
 #define PAAD_SIM_PLATFORM_PORTS  2
 #define PAAD_SIM_PLATFORM_TIMERS 4 /* per port clock */
+#define PAAD_SIM_MCLK_HZ         24576000 /* 512 x 48 kHz */
+#define PAAD_SIM_SAMPLE_RATE     48000
 
 struct paad_sim_platform_config {
 	enum paad_sim_time_mode mode;
@@ -36,6 +39,10 @@ struct paad_sim_platform_config {
 	uint64_t initial_ns[PAAD_SIM_PLATFORM_PORTS];
 	paad_hal_ppb_t natural_ppb[PAAD_SIM_PLATFORM_PORTS];
 	uint8_t mac[PAAD_SIM_PLATFORM_PORTS][PAAD_HAL_ETH_ADDR_LEN];
+	/** Media clock (24.576 MHz, 48 kHz audio, captures on port 0's
+	 * clock): an oscillator of its own, with its own natural error. */
+	bool mclk;
+	paad_hal_ppb_t mclk_natural_ppb;
 };
 
 struct paad_sim_platform {
@@ -46,6 +53,7 @@ struct paad_sim_platform {
 
 	struct paad_hal_eth *eth_list[PAAD_SIM_PLATFORM_PORTS];
 	struct paad_hal_timer *timer_list[PAAD_SIM_PLATFORM_PORTS * PAAD_SIM_PLATFORM_TIMERS];
+	struct paad_sim_mclk mclk;
 	struct paad_hal_platform hal;
 	struct paad_sim_platform_config cfg;
 };

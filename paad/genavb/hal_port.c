@@ -39,6 +39,8 @@
 #include "paad/hal.h"
 #include "paad/genavb/hal_port.h"
 
+#include "hal_internal.h"
+
 #define NSECS_PER_SEC_U64 1000000000ULL
 
 struct hal_port_timer {
@@ -461,6 +463,8 @@ static void hal_exit(struct net_port *port)
 	struct hal_port_drv *drv = net_port_drv(port);
 	unsigned int i;
 
+	paad_genavb_mclk_rec_exit(port);
+
 	if (drv->started) {
 		paad_hal_eth_stop(drv->eth);
 		drv->started = false;
@@ -585,6 +589,16 @@ int hal_port_init(struct net_port *port)
 
 	os_log(LOG_INIT, "port(%u) HAL port %u (%s): %u tx queues, %u shaped\n", port->index, port->drv_index,
 	       drv->eth->name ? drv->eth->name : "", nq, shaped);
+
+	/* The media clock, if any, is recovered against the gPTP clock of the
+	 * first port, like GenAVB's own recovery drivers. Audio still works
+	 * without it, from gPTP-derived software clocks. */
+	if (port->index == 0 && pf->mclk) {
+		if (pf->mclk->ptp_clock != drv->eth->clock)
+			os_log(LOG_ERR, "port(%u) media clock captures on another clock: no recovery\n", port->index);
+		else if (paad_genavb_mclk_rec_init(port, pf->mclk) < 0)
+			os_log(LOG_ERR, "port(%u) media clock recovery not available\n", port->index);
+	}
 
 	return 0;
 

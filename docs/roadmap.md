@@ -36,7 +36,7 @@ Each phase ends on a gate that is a test result, not a date.
 - [x] `openpaad-sim`: independent simulated devices in separate processes, joined by a local virtual cable; gPTP lock and ATDECC discovery checked end to end
 - [x] Virtual-time simulation (decision 0013): time moves only when every task is idle, to the next simulated event or FreeRTOS tick; cabled devices advance in lockstep. Exact GenAVB timing whatever the host's load.
 - [x] Audio between two simulated devices: AAF (2 ch, 32 bit, 48 kHz, class A), reserved with SRP, timed by GenAVB's gPTP-derived media clock; in virtual time every frame arrives (end-to-end test). In real time on a host it loses data.
-- [ ] Media clock recovery on the HAL (`mclk`: steer and capture), listener locked to the talker
+- [x] Media clock recovery on the HAL (decision 0014): GenAVB's own loop on the HAL media clock (steer and capture), simulated audio oscillators; in virtual time the talker's audio clock locks to gPTP and the listener's to the stream, both within a few ppb and about 50 ns of phase (end-to-end test)
 - [ ] Connection the Milan way: ATDECC/ACMP binding instead of app-driven SRP
 - [ ] Real-network back-ends (Linux veth, macOS feth/BPF)
 - [ ] Conformance harness, fuzz targets

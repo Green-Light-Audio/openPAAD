@@ -60,6 +60,7 @@
 #include "paad/sim/platform.h"
 
 #include "audio.h"
+#include "media_clock.h"
 
 /* GenAVB internals: start the management (MAC service) and gPTP instances
  * of a second endpoint port (api/rtos/init.c starts those of the first),
@@ -118,24 +119,19 @@ static int bench_offset(int64_t *offset)
 	return 0;
 }
 
-/* Device: gPTP time minus the clock shared by the simulated devices (the
- * host's monotonic clock, or virtual time in lockstep). */
-static int device_offset(int64_t *offset)
+/* Device: a simulated instant and its gPTP time. gPTP time minus that
+ * instant compares the device with the clock shared by the simulated
+ * devices (the host's monotonic clock, or virtual time in lockstep). */
+static int device_instant(uint64_t *now, uint64_t *gptp_ns)
 {
-	uint64_t now, g;
 	int rc;
 
 	taskENTER_CRITICAL();
-	now = paad_sim_world_now(&paad_sim_platform()->world);
-	rc = gptp_time_at(0, now, &g);
+	*now = paad_sim_world_now(&paad_sim_platform()->world);
+	rc = gptp_time_at(0, *now, gptp_ns);
 	taskEXIT_CRITICAL();
 
-	if (rc < 0)
-		return -1;
-
-	*offset = (int64_t)(g - now);
-
-	return 0;
+	return rc;
 }
 
 static void finish(int status)
@@ -240,11 +236,16 @@ static void main_task(void *arg)
 		sleep_until(&board->world, start + (uint64_t)t * 1000000000ULL);
 
 		if (cable_name) {
-			if (device_offset(&offset) < 0)
+			uint64_t now, g;
+
+			if (device_instant(&now, &g) < 0) {
 				paad_sim_printf("%s: t=%us cannot read the gPTP clock\n", tag, t);
-			else
-				paad_sim_printf("%s: t=%us gPTP - shared clock: %" PRId64 " ns\n", tag, t, offset);
+				continue;
+			}
+			paad_sim_printf("%s: t=%us gPTP - shared clock: %" PRId64 " ns\n", tag, t, (int64_t)(g - now));
 			audio_report(tag, t);
+			if (audio_demo)
+				media_clock_report(tag, t, now, g);
 			continue;
 		}
 
@@ -302,6 +303,8 @@ static int build_board(void)
 		cfg.initial_ns[0] = (virtual_time ? 0 : paad_sim_monotonic_ns(NULL)) +
 				    (side == 'a' ? 1000 : 2000) * 1000000000ULL;
 		cfg.natural_ppb[0] = side == 'a' ? 0 : 20000;
+		/* audio oscillators: a 40 ppm fast, b 30 ppm slow */
+		cfg.mclk_natural_ppb = side == 'a' ? 40000 : -30000;
 	}
 
 	if (paad_sim_platform_init(&cfg) != PAAD_HAL_OK)

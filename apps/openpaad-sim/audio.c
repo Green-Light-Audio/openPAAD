@@ -12,7 +12,9 @@
  * source), the reservation is made through GenAVB's MSRP control API, and
  * the samples count: channel 0 carries the frame number, channel 1 its
  * complement. The listener checks that every frame arrives, in order, and
- * how long before its presentation time it arrives.
+ * how long before its presentation time it arrives. Its clock domain takes
+ * its time from the stream, so GenAVB recovers the device's audio clock
+ * from the stream's timestamps (media_clock.c reports it).
  *
  * Run it in virtual time (--virtual): every frame arrives, checked end to
  * end by tests/e2e/audio.sh. In real time FreeRTOS cannot keep GenAVB's
@@ -88,7 +90,9 @@ static void stream_params(struct genavb_stream_params *p, avtp_direction_t dir, 
 	p->talker.latency = 500000; /* process every 0.5 ms (GenAVB minimum) */
 	/* A host is not a real-time target: give frames more time to reach
 	 * the listener than the class A default (2 ms). */
-	p->flags = dir == AVTP_DIRECTION_TALKER ? GENAVB_STREAM_FLAGS_MAX_TRANSIT_TIME_VALID : 0;
+	/* The listener's media clock follows this stream (MCR: media clock
+	 * recovery). */
+	p->flags = dir == AVTP_DIRECTION_TALKER ? GENAVB_STREAM_FLAGS_MAX_TRANSIT_TIME_VALID : GENAVB_STREAM_FLAGS_MCR;
 	p->talker.max_transit_time = 10000000;
 	p->talker.vlan_id = htons(VLAN_VID_DEFAULT);
 }
@@ -272,11 +276,21 @@ static void listener_task(void *arg)
 
 int audio_listener_start(struct genavb_handle *genavb, const uint8_t talker_mac[6])
 {
+	struct genavb_msg_clock_domain_set_source src = {
+		.domain = GENAVB_CLOCK_DOMAIN_0,
+		.source_type = GENAVB_CLOCK_SOURCE_TYPE_INPUT_STREAM,
+	};
 	struct genavb_msg_listener_register reg = { 0 };
 	int rc;
 
 	audio.talker = false;
 	stream_params(&audio.params, AVTP_DIRECTION_LISTENER, talker_mac);
+
+	/* The device's clock domain 0 takes its time from the stream. */
+	memcpy(src.stream_id, audio.params.stream_id, 8);
+	rc = control(GENAVB_CTRL_CLOCK_DOMAIN, GENAVB_MSG_CLOCK_DOMAIN_SET_SOURCE, &src, sizeof(src));
+	if (rc != GENAVB_SUCCESS)
+		return rc;
 
 	audio.batch = BATCH_FRAMES * FRAME_BYTES;
 	rc = genavb_stream_create(genavb, &audio.stream, &audio.params, &audio.batch, 0);
