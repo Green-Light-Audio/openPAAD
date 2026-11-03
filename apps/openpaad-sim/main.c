@@ -20,7 +20,9 @@
  *
  * Device (--cable NAME --side a|b): one process is one device running the
  * full stack on its port 0, cabled to the device of another process on the
- * same host. Side a is grandmaster capable and its clock is exact; side b
+ * same host. With --net IFNAME instead of --cable, port 0 is plugged into a
+ * network interface of the host, where real equipment and software (an
+ * ATDECC controller such as Hive, another simulated device) can reach it. Side a is grandmaster capable and its clock is exact; side b
  * starts 1000 s away, ticks 20 ppm fast and is not grandmaster capable.
  * Each device is a Milan-mode ATDECC entity with one audio stream each way
  * (entity.c); it streams audio when a controller connects it (audio.c), and
@@ -29,12 +31,16 @@
  * the same value), its streams and its media clock.
  *
  * Usage: openpaad-sim [-t seconds] [--virtual] [--check-gptp ns]
- *                     [--cable NAME --side a|b [--control SCRIPT]] [-v | --log file]
+ *                     [--cable NAME | --net IFNAME] [--side a|b] [--control SCRIPT]
+ *                     [-v | --log file]
  *   -t seconds        run for this long, then exit (default: forever)
  *   --check-gptp ns   bench: exit with status 0 only if, over the last 5
  *                     seconds, port 1's gPTP time stayed within ns of port 0's
  *   --cable NAME      device mode, cabled through /tmp/openpaad-NAME-<side>.sock
- *   --side a|b        which end of the cable
+ *   --net IFNAME      device mode, on the host's interface IFNAME (real time;
+ *                     needs the right to capture on it, e.g. root)
+ *   --side a|b        which device (MAC address, clock); a is grandmaster
+ *                     capable
  *   --log file        write GenAVB's log to this file (default:
  *                     openpaad-sim.log, or openpaad-sim-<side>.log)
  *   -v                write GenAVB's log to the terminal instead
@@ -84,6 +90,8 @@ static int64_t check_ns = -1;
 static const char *log_path;
 static bool verbose;
 static const char *cable_name;
+static const char *net_if;
+static bool device_mode; /* --cable or --net */
 static char side; /* 'a' or 'b' in device mode */
 static char tag[16] = "openpaad-sim";
 static const char *control_script;
@@ -170,9 +178,16 @@ static void start_stack(void)
 	int rc;
 
 	genavb_get_default_config(&config);
-	config.fgptp_config.domain_cfg[0].gmCapable = (!cable_name || side == 'a') ? 1 : 0;
+	config.fgptp_config.domain_cfg[0].gmCapable = (!device_mode || side == 'a') ? 1 : 0;
 
-	if (cable_name) {
+	/* A host interface gives software timestamps only: tens of
+	 * microseconds of jitter, where gPTP's usual 800 ns limit on the link
+	 * delay assumes hardware ones. Accept up to 1 ms there, so that gPTP
+	 * still runs, coarsely. */
+	if (net_if)
+		config.fgptp_config.neighborPropDelayThreshold = 1000000;
+
+	if (device_mode) {
 		char name[32];
 
 		snprintf(name, sizeof(name), "openpaad-sim %c", side);
@@ -182,7 +197,7 @@ static void start_stack(void)
 		}
 	}
 
-	if (!cable_name) {
+	if (!device_mode) {
 		/* Bench: same settings on port 1, not grandmaster capable. */
 		management_port1 = config.management_config;
 		management_port1.logical_port_list[0] = 1;
@@ -202,7 +217,7 @@ static void start_stack(void)
 		finish(2);
 	}
 
-	if (!cable_name && (!management_task_init(&management_port1) || !gptp_task_init(&gptp_port1))) {
+	if (!device_mode && (!management_task_init(&management_port1) || !gptp_task_init(&gptp_port1))) {
 		paad_sim_printf("%s: cannot start gPTP on port 1\n", tag);
 		finish(2);
 	}
@@ -225,7 +240,7 @@ static void main_task(void *arg)
 	start_stack();
 	start = paad_sim_world_now(&board->world);
 
-	if (cable_name) {
+	if (device_mode) {
 		int rc = audio_start(genavb, tag);
 
 		if (rc != GENAVB_SUCCESS) {
@@ -252,8 +267,9 @@ static void main_task(void *arg)
 		}
 	}
 
-	if (cable_name)
-		paad_sim_printf("%s: device running on cable %s%s, entity %016" PRIx64 "\n", tag, cable_name,
+	if (device_mode)
+		paad_sim_printf("%s: device running on %s %s%s, entity %016" PRIx64 "\n", tag,
+				cable_name ? "cable" : "interface", cable_name ? cable_name : net_if,
 				virtual_time ? ", virtual time" : "", entity_id(board->cfg.mac[0], ENTITY_DEVICE));
 	else
 		paad_sim_printf("%s: stack running, port 0 and port 1 joined by a %u ns cable\n", tag, CABLE_NS);
@@ -263,7 +279,7 @@ static void main_task(void *arg)
 
 		app_sleep_until(&board->world, start + (uint64_t)t * 1000000000ULL);
 
-		if (cable_name) {
+		if (device_mode) {
 			uint64_t now, g;
 
 			if (device_instant(&now, &g) < 0) {
@@ -303,8 +319,8 @@ static void main_task(void *arg)
 static void usage(const char *prog)
 {
 	fprintf(stderr,
-		"usage: %s [-t seconds] [--virtual] [--check-gptp ns] [--cable NAME --side a|b [--control SCRIPT]]\n"
-		"       [-v | --log file]\n", prog);
+		"usage: %s [-t seconds] [--virtual] [--check-gptp ns] [--cable NAME | --net IFNAME] [--side a|b]\n"
+		"       [--control SCRIPT] [-v | --log file]\n", prog);
 	exit(2);
 }
 
@@ -322,7 +338,7 @@ static int build_board(void)
 	if (virtual_time)
 		cfg.mode = PAAD_SIM_VIRTUAL_TIME;
 
-	if (cable_name) {
+	if (device_mode) {
 		cfg.cable = false;
 		for (i = 0; i < PAAD_SIM_PLATFORM_PORTS; i++)
 			cfg.mac[i][5] = (uint8_t)((side == 'a' ? 1 : 2) + 2 * i); /* a: 01, 03; b: 02, 04 */
@@ -338,10 +354,21 @@ static int build_board(void)
 	if (paad_sim_platform_init(&cfg) != PAAD_HAL_OK)
 		return -1;
 
-	if (!cable_name)
+	if (!device_mode)
 		return 0;
 
 	board = paad_sim_platform();
+
+	if (net_if) {
+		char err[160];
+
+		if (paad_sim_eth_connect_host(&board->eth[0], net_if, err, sizeof(err)) != PAAD_HAL_OK) {
+			fprintf(stderr, "--net %s: %s\n", net_if, err);
+			return -1;
+		}
+		return 0;
+	}
+
 	snprintf(local, sizeof(local), "/tmp/openpaad-%s-%c.sock", cable_name, side);
 	snprintf(peer, sizeof(peer), "/tmp/openpaad-%s-%c.sock", cable_name, side == 'a' ? 'b' : 'a');
 
@@ -366,6 +393,8 @@ int main(int argc, char **argv)
 			check_ns = strtoll(argv[++i], NULL, 0);
 		else if (!strcmp(argv[i], "--cable") && i + 1 < argc)
 			cable_name = argv[++i];
+		else if (!strcmp(argv[i], "--net") && i + 1 < argc)
+			net_if = argv[++i];
 		else if (!strcmp(argv[i], "--side") && i + 1 < argc)
 			side = argv[++i][0];
 		else if (!strcmp(argv[i], "--log") && i + 1 < argc)
@@ -380,11 +409,14 @@ int main(int argc, char **argv)
 			usage(argv[0]);
 	}
 
-	if ((control_script && !cable_name) ||
-	    (cable_name && ((side != 'a' && side != 'b') || check_ns >= 0 || strlen(cable_name) > 40 ||
-			   strchr(cable_name, '/')))) {
-		fprintf(stderr, "--cable needs --side a or b and a short name without '/', and no --check-gptp;\n"
-				"--control needs --cable\n");
+	device_mode = cable_name || net_if;
+
+	if ((control_script && !device_mode) || (cable_name && net_if) || (net_if && virtual_time) ||
+	    (device_mode && ((side != 'a' && side != 'b') || check_ns >= 0)) ||
+	    (cable_name && (strlen(cable_name) > 40 || strchr(cable_name, '/')))) {
+		fprintf(stderr, "--cable or --net (not both) need --side a or b, and no --check-gptp;\n"
+				"the cable name must be short, without '/'; --net runs in real time only;\n"
+				"--control needs --cable or --net\n");
 		return 2;
 	}
 
@@ -398,7 +430,7 @@ int main(int argc, char **argv)
 		return 2;
 	}
 
-	if (cable_name)
+	if (device_mode)
 		snprintf(tag, sizeof(tag), "openpaad-sim[%c]", side);
 
 	setvbuf(stdout, NULL, _IOLBF, 0);
@@ -407,7 +439,7 @@ int main(int argc, char **argv)
 		FILE *log;
 
 		if (!log_path) {
-			if (cable_name)
+			if (device_mode)
 				snprintf(default_log, sizeof(default_log), "openpaad-sim-%c.log", side);
 			else
 				snprintf(default_log, sizeof(default_log), "openpaad-sim.log");

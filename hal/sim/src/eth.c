@@ -16,6 +16,7 @@
 
 #include "paad/sim/eth.h"
 
+#include "host_if.h"
 #include "lock.h"
 
 #define ETH_MIN_LEN   60 /* without FCS */
@@ -64,6 +65,9 @@ uint64_t paad_sim_eth_wire_time_ns(uint16_t len, uint32_t speed_mbps)
 
 static bool link_up(const struct paad_sim_eth *eth)
 {
+	if (eth->host)
+		return eth->started && eth->host_up;
+
 	if (eth->remote)
 		return eth->started && eth->peer_up;
 
@@ -141,32 +145,47 @@ static bool accepts(struct paad_sim_eth *eth, const uint8_t *dst)
 	return false;
 }
 
+/* Keep a received frame for the HAL user if the port wants it; its first
+ * bit arrived at source time first_bit_ns. Caller holds the lock; returns
+ * true if the frame was kept. */
+static bool rx_queue(struct paad_sim_eth *dst, const uint8_t *data, uint16_t len, uint64_t first_bit_ns)
+{
+	struct paad_sim_eth_rx_slot *slot;
+
+	if (!dst->started)
+		return false; /* port went down while the frame was on the wire */
+
+	if (len < PAAD_HAL_ETH_ADDR_LEN || !accepts(dst, data)) {
+		dst->stats.rx_dropped_filter++;
+		return false;
+	}
+
+	if (dst->rx_count == PAAD_SIM_ETH_RX_SLOTS) {
+		dst->stats.rx_dropped_full++;
+		return false;
+	}
+
+	slot = &dst->rx[(dst->rx_head + dst->rx_count) % PAAD_SIM_ETH_RX_SLOTS];
+	slot->len = len;
+	slot->timestamp_ns = paad_sim_clock_at(dst->clock, first_bit_ns);
+	memcpy(slot->data, data, len);
+	dst->rx_count++;
+	dst->stats.rx_frames++;
+
+	return true;
+}
+
 static void deliver(void *arg, uint64_t source_ns)
 {
 	struct in_flight *f = arg;
 	struct paad_sim_eth *dst = f->dst;
 	struct paad_hal_eth_event ev = { .type = PAAD_HAL_ETH_EV_RX_READY };
-	bool queued = false;
+	bool queued;
 
 	(void)source_ns;
 
 	sim_lock(&dst->lock);
-	if (!dst->started) {
-		/* port went down while the frame was on the wire */
-	} else if (f->len < PAAD_HAL_ETH_ADDR_LEN || !accepts(dst, f->data)) {
-		dst->stats.rx_dropped_filter++;
-	} else if (dst->rx_count == PAAD_SIM_ETH_RX_SLOTS) {
-		dst->stats.rx_dropped_full++;
-	} else {
-		struct paad_sim_eth_rx_slot *slot = &dst->rx[(dst->rx_head + dst->rx_count) % PAAD_SIM_ETH_RX_SLOTS];
-
-		slot->len = f->len;
-		slot->timestamp_ns = paad_sim_clock_at(dst->clock, f->first_bit_source_ns);
-		memcpy(slot->data, f->data, f->len);
-		dst->rx_count++;
-		dst->stats.rx_frames++;
-		queued = true;
-	}
+	queued = rx_queue(dst, f->data, f->len, f->first_bit_source_ns);
 	sim_unlock(&dst->lock);
 
 	sim_free(f);
@@ -198,7 +217,12 @@ static int sim_start(struct paad_hal_eth *hal, const uint8_t addr[PAAD_HAL_ETH_A
 	}
 	memcpy(eth->addr, addr, PAAD_HAL_ETH_ADDR_LEN);
 	eth->started = true;
-	if (eth->remote) {
+	if (eth->host) {
+		host_if_filter(eth->host, addr);
+		eth->host_up = host_if_up(eth->host);
+		eth->host_checked = paad_sim_world_now(eth->world);
+		peer_up = link_changed(eth);
+	} else if (eth->remote) {
 		eth->last_hello = paad_sim_world_now(eth->world);
 		cable_send(eth, CABLE_HELLO, 0, 0, NULL, 0);
 		peer_up = link_changed(eth);
@@ -209,7 +233,7 @@ static int sim_start(struct paad_hal_eth *hal, const uint8_t addr[PAAD_HAL_ETH_A
 
 	if (peer_up) {
 		notify_link(eth);
-		if (!eth->remote)
+		if (eth->peer)
 			notify_link(eth->peer);
 	}
 
@@ -229,12 +253,14 @@ static void sim_stop(struct paad_hal_eth *hal)
 	if (eth->remote) {
 		cable_send(eth, CABLE_BYE, 0, 0, NULL, 0);
 		was_up = link_changed(eth);
+	} else if (eth->host) {
+		was_up = link_changed(eth);
 	}
 	sim_unlock(&eth->lock);
 
 	if (was_up) {
 		notify_link(eth);
-		if (!eth->remote)
+		if (eth->peer)
 			notify_link(eth->peer);
 	}
 }
@@ -326,7 +352,13 @@ static int sim_transmit(struct paad_hal_eth *hal, unsigned int queue, const stru
 		done->ev.timestamp_ns = paad_sim_clock_at(eth->clock, start);
 	}
 
-	if (link_up(eth) && eth->remote) {
+	if (link_up(eth) && eth->host) {
+		/* Out on the host's interface now: the host does the timing. */
+		if (host_if_send(eth->host, frame->data, frame->len) == PAAD_HAL_OK)
+			eth->stats.tx_frames++;
+		else
+			eth->stats.tx_dropped_link_down++;
+	} else if (link_up(eth) && eth->remote) {
 		cable_send(eth, CABLE_FRAME, start + eth->propagation_ns, end + eth->propagation_ns, frame->data,
 			   frame->len);
 		eth->arrival[eth->cable_tx % PAAD_SIM_ETH_LOCKSTEP_RING] = end + eth->propagation_ns;
@@ -437,6 +469,7 @@ void paad_sim_eth_deinit(struct paad_sim_eth *eth)
 {
 	if (eth->sock >= 0)
 		close(eth->sock);
+	host_if_close(eth->host);
 	pthread_mutex_destroy(&eth->lock);
 }
 
@@ -639,4 +672,79 @@ int paad_sim_eth_connect(struct paad_sim_eth *a, struct paad_sim_eth *b, uint32_
 	b->propagation_ns = propagation_ns;
 
 	return PAAD_HAL_OK;
+}
+
+/* --- Host network interface ------------------------------------------------- */
+
+#define HOST_LINK_CHECK_NS 100000000ULL
+
+/* Read what arrived on the host interface, keep the link state current.
+ * Runs from the world's runner (the simulated interrupt context). */
+static void host_poll(void *arg)
+{
+	struct paad_sim_eth *eth = arg;
+	struct paad_hal_eth_event ev = { .type = PAAD_HAL_ETH_EV_RX_READY };
+	uint8_t buf[PAAD_SIM_ETH_MAX_FRAME];
+	uint64_t now = paad_sim_world_now(eth->world);
+	bool queued = false, link;
+	int len;
+
+	for (;;) {
+		uint64_t rx_ns = 0;
+
+		len = host_if_recv(eth->host, buf, sizeof(buf), &rx_ns);
+		if (len <= 0)
+			break;
+
+		/* The host shows us our own frames too. */
+		if (len >= 12 && !memcmp(buf + PAAD_HAL_ETH_ADDR_LEN, eth->addr, PAAD_HAL_ETH_ADDR_LEN))
+			continue;
+
+		sim_lock(&eth->lock);
+		queued |= rx_queue(eth, buf, (uint16_t)len, rx_ns && rx_ns <= now ? rx_ns : now);
+		sim_unlock(&eth->lock);
+	}
+
+	sim_lock(&eth->lock);
+	if (now - eth->host_checked >= HOST_LINK_CHECK_NS) {
+		eth->host_up = host_if_up(eth->host);
+		eth->host_checked = now;
+	}
+	link = link_changed(eth);
+	sim_unlock(&eth->lock);
+
+	if (queued)
+		notify(eth, &ev);
+	if (link)
+		notify_link(eth);
+}
+
+int paad_sim_eth_connect_host(struct paad_sim_eth *eth, const char *ifname, char *err, size_t err_len)
+{
+	struct paad_sim_host_if *h;
+	int rc;
+
+	if (eth->peer || eth->remote || eth->host) {
+		snprintf(err, err_len, "port already connected");
+		return PAAD_HAL_ERR_INVALID;
+	}
+
+	if (eth->world->mode != PAAD_SIM_REAL_TIME) {
+		snprintf(err, err_len, "a host interface needs real time");
+		return PAAD_HAL_ERR_STATE;
+	}
+
+	rc = host_if_open(ifname, &h, err, err_len);
+	if (rc != PAAD_HAL_OK)
+		return rc;
+
+	sim_lock(&eth->lock);
+	eth->host = h;
+	sim_unlock(&eth->lock);
+
+	rc = paad_sim_world_add_poller(eth->world, host_poll, eth);
+	if (rc != PAAD_HAL_OK)
+		snprintf(err, err_len, "no room for another poller");
+
+	return rc;
 }

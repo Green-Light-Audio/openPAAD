@@ -38,5 +38,5 @@ Each phase ends on a gate that is a test result, not a date.
 - [x] Audio between two simulated devices: AAF (2 ch, 32 bit, 48 kHz, class A), reserved with SRP, timed by GenAVB's gPTP-derived media clock; in virtual time every frame arrives (end-to-end test). In real time on a host it loses data.
 - [x] Media clock recovery on the HAL (decision 0014): GenAVB's own loop on the HAL media clock (steer and capture), simulated audio oscillators; in virtual time the talker's audio clock locks to gPTP and the listener's to the stream, both within a few ppb and about 50 ns of phase (end-to-end test)
 - [x] Connection the Milan way (decision 0015): each simulated device is a Milan-mode ATDECC entity, a scripted controller binds and unbinds them; the end-to-end test covers discovery, binding, probing, SRP reservation, audio with media clock recovery, unbinding and rebinding
-- [ ] Real-network back-ends (Linux veth, macOS feth/BPF)
+- [x] Real-network back-end (decision 0016): a simulated device on a host interface through libpcap (veth on Linux, feth on macOS, or a real port), for Hive; end-to-end test on a veth pair in CI
 - [ ] Conformance harness, fuzz targets

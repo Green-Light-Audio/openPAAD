@@ -26,3 +26,12 @@ set_tests_properties(openpaad_sim_two_devices PROPERTIES TIMEOUT 120 LABELS e2e)
 add_test(NAME openpaad_sim_audio
   COMMAND sh ${CMAKE_SOURCE_DIR}/tests/e2e/audio.sh $<TARGET_FILE:openpaad-sim> 20 100)
 set_tests_properties(openpaad_sim_audio PROPERTIES TIMEOUT 400 LABELS e2e)
+
+# End to end on a real network interface (Linux veth pair, real time): only
+# with libpcap, and where root or passwordless sudo is available (CI);
+# skipped otherwise.
+if(OPENPAAD_SIM_HOST_NET)
+  add_test(NAME openpaad_sim_net
+    COMMAND sh ${CMAKE_SOURCE_DIR}/tests/e2e/net.sh $<TARGET_FILE:openpaad-sim> 20)
+  set_tests_properties(openpaad_sim_net PROPERTIES TIMEOUT 120 LABELS e2e SKIP_RETURN_CODE 77)
+endif()

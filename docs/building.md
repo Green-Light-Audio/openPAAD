@@ -38,6 +38,9 @@ release. The devcontainer (`.devcontainer/`) has everything installed.
 
 Host builds need a C/C++ compiler (GCC 12+ or Clang 15+), CMake 3.22+ and
 Ninja. GoogleTest is used from the system if present, otherwise fetched.
+libpcap lets simulated devices use real network interfaces (`--net`): it is
+part of macOS; on Linux install `libpcap-dev` (without it, or with
+`-DOPENPAAD_SIM_PCAP=OFF`, everything else builds and runs).
 Linux and macOS are both supported hosts (decision 0008); on macOS:
 
 ```sh
@@ -145,6 +148,48 @@ openpaad-sim[b]: t=10s media clock: locked to stream, adjust +29.998 ppm, error 
 simulator, which knows the audio clock exactly: its rate over the last
 second against gPTP time, and how far it has drifted from a perfect
 gPTP-rate clock since recovery locked (`max`: the largest drift since then).
+
+### On a real network (Hive)
+
+`--net IFNAME` plugs a device into a network interface of the machine
+instead of a cable (decision 0016): its frames go out on that interface, so
+Hive or any other ATDECC controller can discover it, read its entity model
+and connect it. It runs in real time, and needs the right to capture on the
+interface (root, or capture rights such as those Wireshark's ChmodBPF
+gives on macOS).
+
+Use a pair of virtual interfaces, which make a private network on the
+machine. Several devices can share one end of the pair, as on one network
+segment; the controller goes on the other end. On macOS (feth):
+
+```sh
+sudo ifconfig feth0 create && sudo ifconfig feth1 create
+sudo ifconfig feth0 peer feth1 && sudo ifconfig feth0 up && sudo ifconfig feth1 up
+sudo build/host/apps/openpaad-sim/openpaad-sim --net feth0 --side a --log /tmp/openpaad-sim-a.log &
+sudo build/host/apps/openpaad-sim/openpaad-sim --net feth0 --side b --log /tmp/openpaad-sim-b.log
+```
+
+In Hive, choose the PCap protocol interface and the interface `feth1`: the
+two entities (`openpaad-sim a` and `openpaad-sim b`) appear, and b's audio
+input can be connected to a's audio output (set b's clock source to its
+audio input first, to see its media clock follow the stream). Remove the
+pair with `sudo ifconfig feth0 destroy && sudo ifconfig feth1 destroy`.
+
+On Linux, the same with veth:
+
+```sh
+sudo ip link add paad0 type veth peer name paad1
+sudo ip link set paad0 up && sudo ip link set paad1 up
+sudo build/host/apps/openpaad-sim/openpaad-sim --net paad0 --side a &
+sudo build/host/apps/openpaad-sim/openpaad-sim --net paad0 --side b
+```
+
+A physical interface works too, but the devices then talk to that
+network, gPTP announcements included. On a host interface timestamps are
+software ones: gPTP locks to a few microseconds instead of nanoseconds,
+and audio loses frames as in any real-time run. `tests/e2e/net.sh` runs
+two devices and the scripted controller on a veth pair (Linux, root or
+passwordless sudo; skipped otherwise).
 
 ## Flashing (Phase 2)
 

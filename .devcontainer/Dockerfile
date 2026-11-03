@@ -6,7 +6,7 @@ ARG XPACK_SHA256=ed8c7d207a85d00da22b90cf80ab3b0b2c7600509afadf6b7149644e9d4790a
 
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       build-essential cmake ninja-build git curl ca-certificates python3 python3-pip python3-venv \
-      libgtest-dev clang-format gdb tcpdump iproute2 \
+      libgtest-dev libpcap-dev clang-format gdb tcpdump iproute2 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL -o /tmp/xpack.tgz \

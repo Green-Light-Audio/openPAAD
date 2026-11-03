@@ -54,7 +54,7 @@ with:
 | Platform | Role | State |
 | --- | --- | --- |
 | NXP i.MX RT1170 (MIMXRT1170-EVKB) | Reference port | Builds and links; hardware bring-up next |
-| Host simulator (Linux, macOS) | Development and CI | Full stack runs; simulated devices cabled across processes, streaming audio with media clock recovery; real-network back-ends next |
+| Host simulator (Linux, macOS) | Development and CI | Full stack runs; simulated devices cabled across processes, streaming audio with media clock recovery, or on a real network interface where Hive can see and connect them |
 | Further ports | Community and partners | After 1.0; see [hal/README.md](hal/README.md) |
 
 ## Quick start

@@ -46,7 +46,7 @@ until its HAL port is written.
 | Directory | Platform | State |
 | --- | --- | --- |
 | `rt1170/` (+ `boards/evkb-rt1170/`) | NXP i.MX RT1170, FreeRTOS | Reference port: builds, bring-up in Phase 2 |
-| `sim/` | Linux and macOS host, FreeRTOS POSIX port | Clock, timers, Ethernet and media clock simulated (virtual or real time), cables within a process or between processes; runs the full GenAVB stack in `openpaad-sim`; audio I/O in Phase 1 |
+| `sim/` | Linux and macOS host, FreeRTOS POSIX port | Clock, timers, Ethernet and media clock simulated (virtual or real time); ports cabled within a process, between processes, or plugged into a host interface (libpcap); runs the full GenAVB stack in `openpaad-sim`; audio I/O in Phase 1 |
 
 Candidates for a next hardware port, to be evaluated after 1.0: Linux on a
 PC with an Intel i210 or i226 network card (hardware credit-based shaping),

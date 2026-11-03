@@ -16,7 +16,10 @@
  * MAAP, ATDECC and AVTP to run between two simulated endpoints.
  *
  * A port can also be cabled to a port of another process on the same host
- * (paad_sim_eth_connect_socket), so that each process is one device.
+ * (paad_sim_eth_connect_socket), so that each process is one device, or
+ * plugged into a network interface of the host (paad_sim_eth_connect_host),
+ * so that real equipment and software (an ATDECC controller such as Hive)
+ * can talk to it.
  *
  * Limits: one link per port (no simulated bridge yet); transmit queues are
  * served in order of submission, and shaper settings are recorded but not
@@ -42,6 +45,8 @@ extern "C" {
 #define PAAD_SIM_ETH_TX_QUEUES   3
 #define PAAD_SIM_ETH_SHAPED      2
 #define PAAD_SIM_ETH_LOCKSTEP_RING 4096
+
+struct paad_sim_host_if;
 
 struct paad_sim_eth_stats {
 	uint64_t tx_frames;
@@ -89,6 +94,11 @@ struct paad_sim_eth {
 	uint64_t last_hello; /**< source time of the last hello sent */
 	char peer_path[104];
 
+	/* Host network interface (paad_sim_eth_connect_host) */
+	struct paad_sim_host_if *host;
+	bool host_up;
+	uint64_t host_checked; /**< source time of the last link check */
+
 	/* Lockstep in virtual time (paad_sim_eth_lockstep_*) */
 	bool peer_gone;      /**< peer said goodbye or fell silent: run alone */
 	uint64_t peer_next;  /**< peer's announced next event (virtual time) */
@@ -116,6 +126,14 @@ int paad_sim_eth_connect(struct paad_sim_eth *a, struct paad_sim_eth *b, uint32_
  * socket (paad_sim_world_add_poller() is done here). */
 int paad_sim_eth_connect_socket(struct paad_sim_eth *eth, const char *local_path, const char *peer_path,
 				uint32_t propagation_ns);
+
+/** Plug this port into the host's network interface ifname (Ethernet;
+ * a veth or feth pair, or a real port), through libpcap: frames go out on
+ * it, and frames for this port's address or its multicast groups come in,
+ * stamped with the time the host received them. Real time only. Needs the
+ * right to capture on the interface (root, or capture rights). On error,
+ * err says why in words. The world polls the interface. */
+int paad_sim_eth_connect_host(struct paad_sim_eth *eth, const char *ifname, char *err, size_t err_len);
 
 /*
  * Lockstep: two processes simulating in virtual time keep their clocks

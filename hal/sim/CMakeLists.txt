@@ -75,6 +75,25 @@ add_library(paad_hal_sim STATIC
 )
 target_include_directories(paad_hal_sim PUBLIC include)
 target_link_libraries(paad_hal_sim PUBLIC paad_hal Threads::Threads)
+
+# Host network interfaces (paad_sim_eth_connect_host) through libpcap: part of
+# macOS, libpcap-dev on Linux. Without it (or with OPENPAAD_SIM_PCAP=OFF),
+# simulated ports only take cables.
+option(OPENPAAD_SIM_PCAP "Let simulated ports use host network interfaces (libpcap)" ON)
+if(OPENPAAD_SIM_PCAP)
+  find_path(PCAP_INCLUDE_DIR pcap/pcap.h HINTS ${CMAKE_OSX_SYSROOT}/usr/include)
+  find_library(PCAP_LIBRARY pcap HINTS ${CMAKE_OSX_SYSROOT}/usr/lib)
+endif()
+if(OPENPAAD_SIM_PCAP AND PCAP_INCLUDE_DIR AND PCAP_LIBRARY)
+  target_sources(paad_hal_sim PRIVATE src/host_if.c)
+  target_include_directories(paad_hal_sim PRIVATE ${PCAP_INCLUDE_DIR})
+  target_link_libraries(paad_hal_sim PUBLIC ${PCAP_LIBRARY})
+  set(OPENPAAD_SIM_HOST_NET ON CACHE INTERNAL "simulated ports can use host interfaces")
+else()
+  message(STATUS "Without libpcap: simulated ports cannot use host network interfaces")
+  target_sources(paad_hal_sim PRIVATE src/host_if_none.c)
+  set(OPENPAAD_SIM_HOST_NET OFF CACHE INTERNAL "simulated ports can use host interfaces")
+endif()
 target_compile_options(paad_hal_sim PRIVATE -Wall -Wextra -Werror $<$<COMPILE_LANGUAGE:C>:-std=gnu11>)
 
 # --- FreeRTOS on the host --------------------------------------------------------
