@@ -318,6 +318,7 @@ u8 acmp_listener_stack_connect(struct entity *entity, u16 listener_unique_id, u1
 
 	desc = ipc_alloc(&avdecc->ipc_tx_media_stack, sizeof(struct genavb_msg_media_stack_connect));
 	if (desc) {
+		os_memset(&desc->u.media_stack_connect, 0, sizeof(struct genavb_msg_media_stack_connect));
 		desc->dst = IPC_DST_ALL;
 		desc->type = GENAVB_MSG_MEDIA_STACK_CONNECT;
 		desc->len = sizeof(struct genavb_msg_media_stack_connect);
@@ -576,6 +577,7 @@ int acmp_talker_avtp_stack_connect(struct entity *entity, unsigned int port_id, 
 	/* Send talker connect to AVTP */
 	desc = ipc_alloc(&avdecc->ipc_tx_media_stack, sizeof(struct genavb_msg_media_stack_connect));
 	if (desc) {
+		os_memset(&desc->u.media_stack_connect, 0, sizeof(struct genavb_msg_media_stack_connect));
 		desc->dst = IPC_DST_ALL;
 		desc->type = GENAVB_MSG_MEDIA_STACK_CONNECT;
 		desc->len = sizeof(struct genavb_msg_media_stack_connect);
