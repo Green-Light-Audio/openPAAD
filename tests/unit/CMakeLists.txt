@@ -49,6 +49,28 @@ target_compile_options(openpaad_rtos_tests PRIVATE -Wall -Wextra -Werror)
 set_source_files_properties(genavb_hal_fixture.c PROPERTIES COMPILE_OPTIONS
   "-Wno-unused-parameter;-Wno-sign-compare;-Wno-address-of-packed-member;-Wno-missing-field-initializers")
 
+# GenAVB's OS clock layer, built alone on a fake hardware clock.
+add_executable(openpaad_genavb_clock_tests
+  genavb_clock_test.cpp
+  genavb_clock_fixture.c
+  ${CMAKE_SOURCE_DIR}/third_party/genavb/rtos/clock.c
+)
+target_include_directories(openpaad_genavb_clock_tests PRIVATE
+  $<TARGET_PROPERTY:genavb_rtos_host,INTERFACE_INCLUDE_DIRECTORIES>
+  $<TARGET_PROPERTY:genavb_protocols_host,INTERFACE_INCLUDE_DIRECTORIES>)
+target_compile_definitions(openpaad_genavb_clock_tests PRIVATE
+  $<TARGET_PROPERTY:genavb_protocols_host,INTERFACE_COMPILE_DEFINITIONS>)
+target_compile_options(openpaad_genavb_clock_tests PRIVATE
+  $<TARGET_PROPERTY:genavb_protocols_host,INTERFACE_COMPILE_OPTIONS>
+  -Wall -Werror $<$<COMPILE_LANGUAGE:CXX>:-Wextra> $<$<COMPILE_LANGUAGE:C>:-Wno-address-of-packed-member>)
+if(CMAKE_C_COMPILER_ID MATCHES "Clang")
+  target_compile_options(openpaad_genavb_clock_tests PRIVATE
+    $<$<COMPILE_LANGUAGE:C>:-Wno-gnu-variable-sized-type-not-at-end -Wno-enum-conversion -Wno-unused-function>)
+endif()
+target_link_libraries(openpaad_genavb_clock_tests PRIVATE GTest::gtest_main)
+target_compile_features(openpaad_genavb_clock_tests PRIVATE cxx_std_17)
+
 include(GoogleTest)
 gtest_discover_tests(openpaad_unit_tests)
 gtest_discover_tests(openpaad_rtos_tests)
+gtest_discover_tests(openpaad_genavb_clock_tests)

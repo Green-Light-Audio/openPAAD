@@ -235,6 +235,28 @@ __exit static void clock_timekeeping_stop(void)
 
 #define TIME_BASE_UPDATE_TRESHOLD (2000000000ULL)
 
+/*
+ * (a * mul) >> shift, computed on 128 bits so it cannot overflow.
+ * mul is about 2^32 (shift is 32), so a plain 64-bit product would overflow
+ * as soon as a exceeds ~4 seconds, i.e. if t0 was not updated in time.
+ */
+static inline uint64_t clock_mul_shift(uint64_t a, uint64_t mul, unsigned int shift)
+{
+	uint64_t a_lo = (uint32_t)a, a_hi = a >> 32;
+	uint64_t m_lo = (uint32_t)mul, m_hi = mul >> 32;
+	uint64_t lo_lo = a_lo * m_lo;
+	uint64_t hi_lo = a_hi * m_lo;
+	uint64_t lo_hi = a_lo * m_hi;
+	uint64_t mid = (lo_lo >> 32) + (uint32_t)hi_lo + (uint32_t)lo_hi;
+	uint64_t lo = (mid << 32) | (uint32_t)lo_lo;
+	uint64_t hi = a_hi * m_hi + (hi_lo >> 32) + (lo_hi >> 32) + (mid >> 32);
+
+	if (!shift)
+		return lo;
+
+	return (hi << (64 - shift)) | (lo >> shift);
+}
+
 static inline void clock_time_base_update(struct os_clock *c, uint64_t ns, uint64_t ns_hw)
 {
 	uint64_t delta_hw = ns_hw - c->sw_clk.hw.t0;
@@ -257,9 +279,9 @@ static inline uint64_t __clock_time_from_hw(struct os_clock *c, uint64_t ns_hw)
 
 	if (c->sw_clk.sw.mul) {
 		if (ns_hw > c->sw_clk.hw.t0)
-			ns = c->sw_clk.sw.t0 + (((ns_hw - c->sw_clk.hw.t0) * c->sw_clk.sw.mul) >> c->sw_clk.sw.shift);
+			ns = c->sw_clk.sw.t0 + clock_mul_shift(ns_hw - c->sw_clk.hw.t0, c->sw_clk.sw.mul, c->sw_clk.sw.shift);
 		else
-			ns = c->sw_clk.sw.t0 - (((c->sw_clk.hw.t0 - ns_hw) * c->sw_clk.sw.mul) >> c->sw_clk.sw.shift);
+			ns = c->sw_clk.sw.t0 - clock_mul_shift(c->sw_clk.hw.t0 - ns_hw, c->sw_clk.sw.mul, c->sw_clk.sw.shift);
 	} else {
 		ns = c->sw_clk.sw.t0 + (ns_hw - c->sw_clk.hw.t0);
 	}
@@ -273,9 +295,9 @@ static inline uint64_t __clock_time_to_hw(struct os_clock *c, uint64_t ns)
 
 	if (c->sw_clk.sw.mul) {
 		if (ns > c->sw_clk.sw.t0)
-			ns_hw = c->sw_clk.hw.t0 + (((ns - c->sw_clk.sw.t0) * c->sw_clk.hw.mul) >> c->sw_clk.hw.shift);
+			ns_hw = c->sw_clk.hw.t0 + clock_mul_shift(ns - c->sw_clk.sw.t0, c->sw_clk.hw.mul, c->sw_clk.hw.shift);
 		else
-			ns_hw = c->sw_clk.hw.t0 - (((c->sw_clk.sw.t0 - ns) * c->sw_clk.hw.mul) >> c->sw_clk.hw.shift);
+			ns_hw = c->sw_clk.hw.t0 - clock_mul_shift(c->sw_clk.sw.t0 - ns, c->sw_clk.hw.mul, c->sw_clk.hw.shift);
 	} else {
 		ns_hw = c->sw_clk.hw.t0 + (ns - c->sw_clk.sw.t0);
 	}
@@ -632,7 +654,7 @@ static inline uint64_t __clock_dtime_to_hw(struct os_clock *c, uint64_t delta_ns
 	uint64_t delta_ns_hw;
 
 	if (c->sw_clk.sw.mul) {
-		delta_ns_hw = (delta_ns * c->sw_clk.hw.mul) >> c->sw_clk.hw.shift;
+		delta_ns_hw = clock_mul_shift(delta_ns, c->sw_clk.hw.mul, c->sw_clk.hw.shift);
 	} else {
 		delta_ns_hw = delta_ns;
 	}

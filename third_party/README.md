@@ -15,6 +15,7 @@ by openPAAD, newest first:
 
 | Date | File | Change | Why |
 | --- | --- | --- | --- |
+| 2026-11-03 | `rtos/clock.c` | The software clock conversions multiply on 128 bits (`clock_mul_shift()`) | They multiplied on 64 bits, which overflows once the time base is more than ~4 s old; that happens when the timekeeping task is starved (a loaded host), and the monotonic clock then jumped 2^32 ns back, which hung the timers |
 | 2026-11-03 | `avdecc/acmp.c` | Stream connect notifications to the application are zeroed before being filled | They were not, so fields left unset kept whatever the allocator returned: a listener's stream flags could carry random bits (media clock recovery, redundancy) |
 | 2026-11-03 | `api/rtos/streaming.c` | `genavb_stream_send()` passes `media_api_write()` a zeroed safeguard entry after its one data entry | `media_api_write()` reads one entry past the last one it is given (as its own comment states); with a single entry that read was out of bounds (found by AddressSanitizer) |
 | 2026-11-02 | `rtos/ipc.c` | Declare the IPC channels of a second endpoint port's gPTP and MAC service (`IPC_*_GPTP_1_*`, `IPC_*_MAC_SERVICE_1_*`) | GenAVB's gPTP and management code already select them for logical port 1, but the RTOS channel table lacked them, so a second endpoint gPTP instance could not start |
