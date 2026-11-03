@@ -155,6 +155,25 @@ if(CMAKE_C_COMPILER_ID MATCHES "Clang")
     -Wno-absolute-value -Wno-unused-function)
 endif()
 
+# --- GenAVB's ATDECC entity models ----------------------------------------------------
+# Reference entity definitions shipped with GenAVB (descriptor tables) and its
+# helpers that check and load them, built unchanged.
+
+set(_aem "${_genavb}/apps/common/aem-manager")
+add_library(genavb_aem_host STATIC
+  ${_genavb}/apps/rtos/aem-manager/aem_manager_rtos.c
+  ${_aem}/aem_manager_helpers.c
+  ${_aem}/listener_talker_audio_single_milan.c
+  ${_aem}/avdecc_controller.c
+)
+target_include_directories(genavb_aem_host PUBLIC ${_aem} ${_genavb}/apps/rtos/aem-manager)
+target_link_libraries(genavb_aem_host PUBLIC genavb_rtos_host)
+target_compile_options(genavb_aem_host PRIVATE -Wall -Werror)
+if(CMAKE_C_COMPILER_ID MATCHES "Clang")
+  # A 16-bit count checked against a limit it cannot exceed.
+  target_compile_options(genavb_aem_host PRIVATE -Wno-tautological-constant-out-of-range-compare)
+endif()
+
 # --- The simulated board and its FreeRTOS glue (openpaad-sim) ----------------------
 
 add_library(paad_sim_platform STATIC src/platform.c src/freertos.c)

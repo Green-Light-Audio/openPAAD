@@ -93,8 +93,13 @@ Side a is grandmaster capable with an exact clock; side b starts 1000 s
 away, runs 20 ppm fast and locks onto a. Each prints its gPTP time minus the
 host clock, the same number on both sides once locked, and logs to
 `openpaad-sim-a.log` / `openpaad-sim-b.log`, where each device's ATDECC
-discovery of the other shows up after up to about 15 s (the standard's
-random advertising delay). `tests/e2e/two_devices.sh` checks both.
+discovery of the other shows up after a few seconds (random advertising
+delays). `tests/e2e/two_devices.sh` checks both.
+
+Each device is an ATDECC entity in Milan mode (decision 0015), built from
+GenAVB's reference listener and talker model: one AAF stream (2 channels,
+32 bits, 48 kHz) and one CRF stream each way. Its entity ID is the EUI-64
+of its MAC address: `02005afffead0001` for a, `02005afffead0002` for b.
 
 ### Virtual time
 
@@ -105,22 +110,32 @@ devices of a cable must use it; they then advance in lockstep. `-t` counts
 simulated seconds; two devices run about 4 times slower than real time, one
 process about as fast as real time.
 
-Add `--audio` to both devices to stream audio from a to b (AAF, 2 channels,
-32 bits, 48 kHz, class A, reserved with SRP); b reports every second the
-frames it received and the gaps:
+### Connecting the devices
+
+A device streams when a controller connects it, as with Hive. `--control`
+adds a controller entity to a device and gives it a script: at each given
+second, once it has discovered both devices, it connects b's audio input to
+a's audio output (setting b's clock source to that input the first time) or
+disconnects it:
 
 ```sh
-build/host/apps/openpaad-sim/openpaad-sim --virtual --audio --cable demo --side a -t 10 &
-build/host/apps/openpaad-sim/openpaad-sim --virtual --audio --cable demo --side b -t 10
+build/host/apps/openpaad-sim/openpaad-sim --virtual --cable demo --side a -t 20 \
+    --control connect@1,disconnect@9,connect@12 &
+build/host/apps/openpaad-sim/openpaad-sim --virtual --cable demo --side b -t 20
 ```
 
-In virtual time every frame arrives (`tests/e2e/audio.sh`). In real time
-the stream loses data: FreeRTOS on a host cannot keep GenAVB's 125 us
-network period.
+Each device prints what ATDECC does (binding, stream connected or
+disconnected, clock source) and, every second, its streams: frames sent by
+the talker, frames received and gaps for the listener, or `no stream
+connected`. In virtual time every frame arrives (`tests/e2e/audio.sh` runs
+this script). In real time the stream loses data: FreeRTOS on a host cannot
+keep GenAVB's 125 us network period.
 
 Each simulated device also has an audio clock (24.576 MHz, its own
 oscillator error: a +40 ppm, b −30 ppm), recovered by GenAVB (decision
-0014): a's to gPTP, b's to the stream. Both report it every second:
+0014): to gPTP when its clock source is internal, to the stream once the
+controller has made the stream input its clock source. Both report it every
+second:
 
 ```text
 openpaad-sim[b]: t=10s media clock: locked to stream, adjust +29.998 ppm, error -0.002 ppm, phase -24 ns, max 24 ns, resets 0

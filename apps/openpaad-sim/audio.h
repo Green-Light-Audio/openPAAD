@@ -4,22 +4,18 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-/* openpaad-sim audio demo: one AAF stream from device a to device b. */
+/* openpaad-sim audio: the streams ATDECC connects. */
 
 #ifndef OPENPAAD_SIM_AUDIO_H
 #define OPENPAAD_SIM_AUDIO_H
 
-#include <stdint.h>
-
 #include "genavb/genavb.h"
 
-/* Talker: gPTP media clock, SRP talker declaration, a counting pattern. */
-int audio_talker_start(struct genavb_handle *genavb, const uint8_t mac[6]);
+/* Listen for stream connections and run the audio of connected streams. */
+int audio_start(struct genavb_handle *genavb, const char *tag);
 
-/* Listener: SRP listener declaration, checks what arrives. */
-int audio_listener_start(struct genavb_handle *genavb, const uint8_t talker_mac[6]);
-
-/* One line of statistics for the last second, prefixed with tag and t. */
+/* One line of statistics per connected stream for the last second (or one
+ * saying none is connected), prefixed with tag and t. */
 void audio_report(const char *tag, unsigned int t);
 
 #endif

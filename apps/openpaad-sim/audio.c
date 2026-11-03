@@ -5,22 +5,23 @@
  */
 
 /*
- * openpaad-sim audio demo: one AAF stream, 2 channels of 32-bit samples at
- * 48 kHz, class A, from device a (talker) to device b (listener).
+ * openpaad-sim audio: the streams ATDECC connects.
  *
- * The talker's media clock is derived from gPTP (GenAVB's PTP clock
- * source), the reservation is made through GenAVB's MSRP control API, and
- * the samples count: channel 0 carries the frame number, channel 1 its
- * complement. The listener checks that every frame arrives, in order, and
- * how long before its presentation time it arrives. Its clock domain takes
- * its time from the stream, so GenAVB recovers the device's audio clock
- * from the stream's timestamps (media_clock.c reports it).
+ * GenAVB's ATDECC stack decides which streams run (entity.c): when a
+ * controller binds a listener's input to a talker's output and SRP has
+ * reserved the path, it tells both applications to open the stream, and to
+ * close it when the binding goes. This module does what a device's audio
+ * application does with that: it opens and closes the streams, and sets the
+ * clock domain's source as the entity says (internal, or a stream input for
+ * media clock recovery).
  *
- * Run it in virtual time (--virtual): every frame arrives, checked end to
- * end by tests/e2e/audio.sh. In real time FreeRTOS cannot keep GenAVB's
- * 125 us network and media clock period on a host, GenAVB's gPTP-derived
- * media clock then misses timestamps, and the stream loses data
- * (decision 0013).
+ * Audio: AAF, 2 channels of 32-bit samples at 48 kHz. The talker's samples
+ * count: channel 0 carries the frame number since the stream opened,
+ * channel 1 its complement, at the rate of its media clock (derived from
+ * gPTP). The listener checks that every frame arrives, in order, and how
+ * long before its presentation time it arrives.
+ *
+ * Run it in virtual time (--virtual) to stream without loss (decision 0013).
  */
 
 #include <inttypes.h>
@@ -39,62 +40,60 @@
 #define CHANNELS         2
 #define FRAME_BYTES      (CHANNELS * 4)
 #define BATCH_FRAMES     48 /* 1 ms */
-#define STREAM_UID       1
 #define TASK_PRIORITY    (tskIDLE_PRIORITY + 2)
 #define TASK_STACK       (configMINIMAL_STACK_SIZE * 2)
 
-/* AAF, 2 channels, 32/32 bits, 48 kHz, 6 frames per packet */
+/* The format this application handles: AAF, 2 channels, 32/32 bits,
+ * 48 kHz, 6 frames per packet (the entity's AAF streams). */
 static const uint64_t aaf_format = 0x0205022000806000ULL;
-static const uint8_t dst_mac[6] = { 0x91, 0xe0, 0xf0, 0x00, 0xfe, 0x01 };
+
+struct stream {
+	struct genavb_stream_handle *handle;
+	uint16_t index; /* stream input or output index in the entity */
+};
 
 static struct {
-	bool talker;
-	struct genavb_stream_handle *stream;
-	struct genavb_stream_params params;
-	unsigned int batch;
-	uint64_t t0; /* gPTP time of frame 0 (talker) */
+	struct genavb_handle *genavb;
+	struct genavb_control_handle *media;
+	const char *tag;
+
+	struct stream talker;
+	uint64_t t0;    /* gPTP time of frame 0 */
+	uint32_t frame; /* next frame to send */
+
+	struct stream listener;
+	bool started;
+	uint32_t next; /* expected frame number */
 
 	/* statistics, per report period */
-	uint64_t frames;
-	uint64_t gaps;
+	uint64_t sent;
 	uint64_t short_writes;
-
-	/* listener state */
-	bool started;
-	uint32_t next;            /* expected frame number */
-	int32_t margin_min_ns;    /* presentation time - arrival, smallest */
+	uint64_t received;
+	uint64_t gaps;
+	int32_t margin_min_ns; /* presentation time - arrival, smallest */
 	int32_t margin_max_ns;
 	bool margin_valid;
 } audio;
 
-static void put_be64(uint8_t *p, uint64_t v)
+static uint64_t gptp_now(void)
 {
-	int i;
+	uint64_t now = 0;
 
-	for (i = 7; i >= 0; i--, v >>= 8)
-		p[i] = (uint8_t)v;
+	genavb_clock_gettime64(GENAVB_CLOCK_GPTP_0_0, &now);
+
+	return now;
 }
 
-static void stream_params(struct genavb_stream_params *p, avtp_direction_t dir, const uint8_t talker_mac[6])
+static uint64_t be64(const void *p)
 {
-	memset(p, 0, sizeof(*p));
-	p->direction = dir;
-	p->subtype = AVTP_SUBTYPE_AAF;
-	p->port = 0;
-	p->stream_class = SR_CLASS_A;
-	memcpy(p->stream_id, talker_mac, 6);
-	p->stream_id[7] = STREAM_UID;
-	memcpy(p->dst_mac, dst_mac, 6);
-	put_be64((uint8_t *)&p->format, aaf_format);
-	p->clock_domain = GENAVB_CLOCK_DOMAIN_0;
-	p->talker.latency = 500000; /* process every 0.5 ms (GenAVB minimum) */
-	/* A host is not a real-time target: give frames more time to reach
-	 * the listener than the class A default (2 ms). */
-	/* The listener's media clock follows this stream (MCR: media clock
-	 * recovery). */
-	p->flags = dir == AVTP_DIRECTION_TALKER ? GENAVB_STREAM_FLAGS_MAX_TRANSIT_TIME_VALID : GENAVB_STREAM_FLAGS_MCR;
-	p->talker.max_transit_time = 10000000;
-	p->talker.vlan_id = htons(VLAN_VID_DEFAULT);
+	const uint8_t *b = p;
+	uint64_t v = 0;
+	int i;
+
+	for (i = 0; i < 8; i++)
+		v = (v << 8) | b[i];
+
+	return v;
 }
 
 static int control(genavb_control_id_t id, genavb_msg_type_t type, const void *msg, unsigned int len)
@@ -115,102 +114,150 @@ static int control(genavb_control_id_t id, genavb_msg_type_t type, const void *m
 	return rc;
 }
 
-static uint64_t gptp_now(void)
+/* --- Stream connections ------------------------------------------------------ */
+
+static void stream_open(struct genavb_stream_params *params, uint16_t index)
 {
-	uint64_t now = 0;
+	bool talker = params->direction == AVTP_DIRECTION_TALKER;
+	struct stream *s = talker ? &audio.talker : &audio.listener;
+	unsigned int batch = BATCH_FRAMES * FRAME_BYTES;
+	struct genavb_stream_handle *handle;
+	int rc;
 
-	genavb_clock_gettime64(GENAVB_CLOCK_GPTP_0_0, &now);
+	if (be64(&params->format) != aaf_format) {
+		paad_sim_printf("%s: ATDECC: stream %s %u connected, format %016" PRIx64 " not handled\n", audio.tag,
+				talker ? "output" : "input", index, be64(&params->format));
+		return;
+	}
 
-	return now;
+	if (s->handle) {
+		paad_sim_printf("%s: ATDECC: stream %s %u connected, but %u is already running\n", audio.tag,
+				talker ? "output" : "input", index, s->index);
+		return;
+	}
+
+	rc = genavb_stream_create(audio.genavb, &handle, params, &batch, 0);
+	if (rc != GENAVB_SUCCESS) {
+		paad_sim_printf("%s: ATDECC: stream %s %u: cannot open it: %s\n", audio.tag, talker ? "output" : "input",
+				index, genavb_strerror(rc));
+		return;
+	}
+
+	taskENTER_CRITICAL();
+	s->handle = handle;
+	s->index = index;
+	if (talker) {
+		audio.t0 = gptp_now();
+		audio.frame = 0;
+	} else {
+		audio.started = false;
+		audio.margin_valid = false;
+	}
+	taskEXIT_CRITICAL();
+
+	paad_sim_printf("%s: ATDECC: stream %s %u connected: stream ID %016" PRIx64
+			", to %02x:%02x:%02x:%02x:%02x:%02x%s\n",
+			audio.tag, talker ? "output" : "input", index, be64(params->stream_id), params->dst_mac[0],
+			params->dst_mac[1], params->dst_mac[2], params->dst_mac[3], params->dst_mac[4], params->dst_mac[5],
+			(!talker && (params->flags & GENAVB_STREAM_FLAGS_MCR)) ? ", media clock source" : "");
 }
 
-/* --- Talker --------------------------------------------------------------- */
-
-static void talker_task(void *arg)
+static void stream_close(avtp_direction_t direction, uint16_t index)
 {
-	uint8_t buf[BATCH_FRAMES * FRAME_BYTES];
-	uint32_t frame = 0;
+	bool talker = direction == AVTP_DIRECTION_TALKER;
+	struct stream *s = talker ? &audio.talker : &audio.listener;
+	struct genavb_stream_handle *handle;
 
-	(void)arg;
+	if (!s->handle || s->index != index)
+		return;
 
-	audio.t0 = gptp_now();
+	taskENTER_CRITICAL();
+	handle = s->handle;
+	s->handle = NULL;
+	taskEXIT_CRITICAL();
 
-	for (;;) {
-		/* Frames due by now on the gPTP-derived media clock. */
-		uint64_t due = (gptp_now() - audio.t0) * SAMPLE_RATE / 1000000000ULL;
+	genavb_stream_destroy(handle);
 
-		while (due - frame >= BATCH_FRAMES) {
-			unsigned int i;
-			int rc;
+	paad_sim_printf("%s: ATDECC: stream %s %u disconnected\n", audio.tag, talker ? "output" : "input", index);
+}
 
-			for (i = 0; i < BATCH_FRAMES; i++) {
-				uint32_t s[CHANNELS] = { frame + i, ~(frame + i) };
+static void handle_media_stack(void)
+{
+	union genavb_media_stack_msg msg;
+	genavb_msg_type_t type;
+	unsigned int len = sizeof(msg);
+	int rc;
 
-				memcpy(&buf[i * FRAME_BYTES], s, sizeof(s));
-			}
+	while (genavb_control_receive(audio.media, &type, &msg, &len) == GENAVB_SUCCESS) {
+		switch (type) {
+		case GENAVB_MSG_MEDIA_STACK_CONNECT:
+			stream_open(&msg.media_stack_connect.stream_params, msg.media_stack_connect.stream_index);
+			break;
 
-			rc = genavb_stream_send(audio.stream, buf, sizeof(buf), NULL, 0);
-			if (rc < (int)sizeof(buf)) {
-				/* stack full (no reservation yet): try again later */
-				audio.short_writes++;
-				break;
-			}
+		case GENAVB_MSG_MEDIA_STACK_DISCONNECT:
+			stream_close(msg.media_stack_disconnect.direction, msg.media_stack_disconnect.stream_index);
+			break;
 
-			frame += BATCH_FRAMES;
-			audio.frames += BATCH_FRAMES;
+		case GENAVB_MSG_MEDIA_SET_CLOCK_SOURCE:
+			/* The entity's clock domain changed source: apply it. */
+			rc = control(GENAVB_CTRL_CLOCK_DOMAIN, GENAVB_MSG_CLOCK_DOMAIN_SET_SOURCE,
+				     &msg.media_stack_set_clock_source, sizeof(msg.media_stack_set_clock_source));
+			paad_sim_printf("%s: ATDECC: clock domain %u follows %s%s\n", audio.tag,
+					msg.media_stack_set_clock_source.domain - GENAVB_CLOCK_DOMAIN_0,
+					msg.media_stack_set_clock_source.source_type == GENAVB_CLOCK_SOURCE_TYPE_INTERNAL ?
+						"gPTP" : "a stream input",
+					rc == GENAVB_SUCCESS ? "" : " (failed)");
+			break;
+
+		case GENAVB_MSG_MEDIA_STACK_BIND:
+			paad_sim_printf("%s: ATDECC: stream input %u bound to %016" PRIx64 " output %u\n", audio.tag,
+					msg.media_stack_bind.listener_stream_index, msg.media_stack_bind.talker_entity_id,
+					msg.media_stack_bind.talker_stream_index);
+			break;
+
+		case GENAVB_MSG_MEDIA_STACK_UNBIND:
+			paad_sim_printf("%s: ATDECC: stream input %u unbound\n", audio.tag,
+					msg.media_stack_unbind.listener_stream_index);
+			break;
+
+		default:
+			break;
 		}
 
-		vTaskDelay(pdMS_TO_TICKS(1));
+		len = sizeof(msg);
 	}
 }
 
-int audio_talker_start(struct genavb_handle *genavb, const uint8_t mac[6])
+/* --- Talker ------------------------------------------------------------------ */
+
+static void talker_send(void)
 {
-	struct genavb_msg_clock_domain_set_source src = {
-		.domain = GENAVB_CLOCK_DOMAIN_0,
-		.source_type = GENAVB_CLOCK_SOURCE_TYPE_INTERNAL,
-		.local_id = GENAVB_CLOCK_SOURCE_PTP_CLK,
-	};
-	struct genavb_msg_talker_register reg = { 0 };
-	unsigned int max_frame_size, max_interval_frames;
-	int rc;
+	uint8_t buf[BATCH_FRAMES * FRAME_BYTES];
+	/* Frames due by now on the gPTP-derived media clock. */
+	uint64_t due = (gptp_now() - audio.t0) * SAMPLE_RATE / 1000000000ULL;
 
-	audio.talker = true;
-	stream_params(&audio.params, AVTP_DIRECTION_TALKER, mac);
+	while (due - audio.frame >= BATCH_FRAMES) {
+		unsigned int i;
+		int rc;
 
-	rc = control(GENAVB_CTRL_CLOCK_DOMAIN, GENAVB_MSG_CLOCK_DOMAIN_SET_SOURCE, &src, sizeof(src));
-	if (rc != GENAVB_SUCCESS)
-		return rc;
+		for (i = 0; i < BATCH_FRAMES; i++) {
+			uint32_t s[CHANNELS] = { audio.frame + i, ~(audio.frame + i) };
 
-	avdecc_fmt_tspec(&audio.params.format, SR_CLASS_A, &max_frame_size, &max_interval_frames);
-	audio.params.talker.max_frame_size = (uint16_t)max_frame_size;
-	audio.params.talker.max_interval_frames = (uint16_t)max_interval_frames;
+			memcpy(&buf[i * FRAME_BYTES], s, sizeof(s));
+		}
 
-	audio.batch = BATCH_FRAMES * FRAME_BYTES;
-	rc = genavb_stream_create(genavb, &audio.stream, &audio.params, &audio.batch, 0);
-	if (rc != GENAVB_SUCCESS)
-		return rc;
+		rc = genavb_stream_send(audio.talker.handle, buf, sizeof(buf), NULL, 0);
+		if (rc < (int)sizeof(buf)) {
+			audio.short_writes++; /* stack full: try again later */
+			break;
+		}
 
-	reg.port = 0;
-	memcpy(reg.stream_id, audio.params.stream_id, 8);
-	reg.params.stream_class = SR_CLASS_A;
-	memcpy(reg.params.destination_address, dst_mac, 6);
-	reg.params.vlan_id = VLAN_VID_DEFAULT;
-	reg.params.max_frame_size = (uint16_t)max_frame_size;
-	reg.params.max_interval_frames = (uint16_t)max_interval_frames;
-	reg.params.rank = NORMAL;
-
-	rc = control(GENAVB_CTRL_MSRP, GENAVB_MSG_TALKER_REGISTER, &reg, sizeof(reg));
-	if (rc != GENAVB_SUCCESS)
-		return rc;
-
-	if (xTaskCreate(talker_task, "audio talker", TASK_STACK, NULL, TASK_PRIORITY, NULL) != pdPASS)
-		return -GENAVB_ERR_NO_MEMORY;
-
-	return GENAVB_SUCCESS;
+		audio.frame += BATCH_FRAMES;
+		audio.sent += BATCH_FRAMES;
+	}
 }
 
-/* --- Listener ------------------------------------------------------------- */
+/* --- Listener ---------------------------------------------------------------- */
 
 static void listener_check(const uint8_t *buf, unsigned int len, const struct genavb_event *ev, unsigned int n_ev,
 			   uint32_t now)
@@ -232,7 +279,7 @@ static void listener_check(const uint8_t *buf, unsigned int len, const struct ge
 
 		audio.started = true;
 		audio.next = s[0] + 1;
-		audio.frames++;
+		audio.received++;
 	}
 
 	for (i = 0; i < n_ev; i++) {
@@ -251,92 +298,86 @@ static void listener_check(const uint8_t *buf, unsigned int len, const struct ge
 	}
 }
 
-static void listener_task(void *arg)
+static void listener_receive(void)
 {
 	static uint8_t buf[16 * BATCH_FRAMES * FRAME_BYTES];
 	struct genavb_event ev[64];
 
+	for (;;) {
+		unsigned int n_ev = 64;
+		uint32_t now = (uint32_t)gptp_now();
+		int rc = genavb_stream_receive(audio.listener.handle, buf, sizeof(buf), ev, &n_ev);
+
+		if (rc <= 0)
+			break;
+
+		listener_check(buf, (unsigned int)rc, ev, n_ev, now);
+	}
+}
+
+/* --- Task and report ----------------------------------------------------------- */
+
+static void audio_task(void *arg)
+{
 	(void)arg;
 
 	for (;;) {
-		for (;;) {
-			unsigned int n_ev = 64;
-			uint32_t now = (uint32_t)gptp_now();
-			int rc = genavb_stream_receive(audio.stream, buf, sizeof(buf), ev, &n_ev);
+		handle_media_stack();
 
-			if (rc <= 0)
-				break;
+		if (audio.talker.handle)
+			talker_send();
 
-			listener_check(buf, (unsigned int)rc, ev, n_ev, now);
-		}
+		if (audio.listener.handle)
+			listener_receive();
 
 		vTaskDelay(pdMS_TO_TICKS(1));
 	}
 }
 
-int audio_listener_start(struct genavb_handle *genavb, const uint8_t talker_mac[6])
+int audio_start(struct genavb_handle *genavb, const char *tag)
 {
-	struct genavb_msg_clock_domain_set_source src = {
-		.domain = GENAVB_CLOCK_DOMAIN_0,
-		.source_type = GENAVB_CLOCK_SOURCE_TYPE_INPUT_STREAM,
-	};
-	struct genavb_msg_listener_register reg = { 0 };
 	int rc;
 
-	audio.talker = false;
-	stream_params(&audio.params, AVTP_DIRECTION_LISTENER, talker_mac);
+	audio.genavb = genavb;
+	audio.tag = tag;
 
-	/* The device's clock domain 0 takes its time from the stream. */
-	memcpy(src.stream_id, audio.params.stream_id, 8);
-	rc = control(GENAVB_CTRL_CLOCK_DOMAIN, GENAVB_MSG_CLOCK_DOMAIN_SET_SOURCE, &src, sizeof(src));
+	/* Opening this channel also starts the ATDECC entity (entity.c). */
+	rc = genavb_control_open(genavb, &audio.media, GENAVB_CTRL_AVDECC_MEDIA_STACK);
 	if (rc != GENAVB_SUCCESS)
 		return rc;
 
-	audio.batch = BATCH_FRAMES * FRAME_BYTES;
-	rc = genavb_stream_create(genavb, &audio.stream, &audio.params, &audio.batch, 0);
-	if (rc != GENAVB_SUCCESS)
-		return rc;
-
-	reg.port = 0;
-	memcpy(reg.stream_id, audio.params.stream_id, 8);
-	rc = control(GENAVB_CTRL_MSRP, GENAVB_MSG_LISTENER_REGISTER, &reg, sizeof(reg));
-	if (rc != GENAVB_SUCCESS)
-		return rc;
-
-	if (xTaskCreate(listener_task, "audio listener", TASK_STACK, NULL, TASK_PRIORITY, NULL) != pdPASS)
+	if (xTaskCreate(audio_task, "audio", TASK_STACK, NULL, TASK_PRIORITY, NULL) != pdPASS)
 		return -GENAVB_ERR_NO_MEMORY;
 
 	return GENAVB_SUCCESS;
 }
 
-/* --- Report --------------------------------------------------------------- */
-
 void audio_report(const char *tag, unsigned int t)
 {
-	if (!audio.stream)
-		return;
-
 	taskENTER_CRITICAL();
-	uint64_t frames = audio.frames, gaps = audio.gaps, shorts = audio.short_writes;
+	bool talking = audio.talker.handle != NULL, listening = audio.listener.handle != NULL;
+	uint64_t sent = audio.sent, shorts = audio.short_writes, received = audio.received, gaps = audio.gaps;
 	int32_t mmin = audio.margin_min_ns, mmax = audio.margin_max_ns;
 	bool mvalid = audio.margin_valid;
-	audio.frames = 0;
-	audio.gaps = 0;
+	audio.sent = 0;
 	audio.short_writes = 0;
+	audio.received = 0;
+	audio.gaps = 0;
 	audio.margin_valid = false;
 	taskEXIT_CRITICAL();
 
-	if (audio.talker) {
+	if (talking)
 		paad_sim_printf("%s: t=%us audio talker: sent %" PRIu64 " frames, %" PRIu64 " waits for the stack\n", tag, t,
-				frames, shorts);
-		return;
-	}
+				sent, shorts);
 
-	if (mvalid)
+	if (listening && mvalid)
 		paad_sim_printf("%s: t=%us audio listener: received %" PRIu64 " frames, %" PRIu64
 				" gaps, presentation in %d..%d us\n",
-				tag, t, frames, gaps, mmin / 1000, mmax / 1000);
-	else
+				tag, t, received, gaps, mmin / 1000, mmax / 1000);
+	else if (listening)
 		paad_sim_printf("%s: t=%us audio listener: received %" PRIu64 " frames, %" PRIu64 " gaps\n", tag, t,
-				frames, gaps);
+				received, gaps);
+
+	if (!talking && !listening)
+		paad_sim_printf("%s: t=%us audio: no stream connected\n", tag, t);
 }

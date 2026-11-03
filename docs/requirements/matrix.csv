@@ -2,7 +2,7 @@ id,clause,topic,requirement (paraphrased),scope,applies_to_reference_endpoint,ge
 AVB-001,4.2.1,AVB profile,Conform to the IEEE 802.1BA AVB system profile for end stations,both,yes,implemented,P2,interop,Covered by GenAVB gPTP/SRP/FQTSS; verify against a reference bridge
 AVB-002,4.2.2,Audio transport,Carry audio as IEEE 1722 AAF streams,both,yes,implemented,P4,interop,
 AVB-003,4.2.3,Media clocking,Support media clock streams (CRF) for clock distribution,both,yes,implemented,P3,hil,
-AVB-004,4.2.4,Connection management,Use the connection management protocol of chapter 5 (ACMP plus MVU binding),both,yes,partial,P5,sim,MVU BIND_STREAM/UNBIND_STREAM missing (see CTL-033/034)
+AVB-004,4.2.4,Connection management,Use the connection management protocol of chapter 5 (ACMP plus MVU binding),both,yes,partial,P5,sim,"MVU BIND_STREAM/UNBIND_STREAM missing (see CTL-033/034). ACMP bind, unbind and rebind exercised end to end in openpaad_sim_audio"
 AVB-005,4.2.5,Redundancy,Seamless network redundancy per chapter 8 is optional,both,no,partial,later,interop,Out of scope for 1.0 (single AVB interface)
 PTP-001,4.2.6.1.1,gPTP neighborPropDelayThresh,Use an 800 ns neighbour propagation delay threshold on copper links,both,yes,unknown,P2,unit,Check GenAVB default profile values
 PTP-002,4.2.6.2.1,gPTP priority1,Advertise priority1 of 248 unless configured otherwise by the user,both,yes,unknown,P2,unit,
@@ -20,7 +20,7 @@ SRP-001,4.2.7.2.1,MSRP domain,Declare the SRP domain for class A with the specif
 SRP-002,4.2.7.2.2,MSRP IN to MT,Support the instantaneous IN to MT transition,both,yes,unknown,P2,unit,
 SRP-003,4.2.7.3,MVRP,Operate MVRP as specified,both,yes,implemented,P2,interop,
 SRP-004,4.3.2,Talker MVRP join,Join the stream VLAN via MVRP before sending stream frames,talker,yes,unknown,P4,sim,
-SRP-005,4.3.3.1,Talker declaration validity,Declare a Talker attribute only when the destination MAC is MAAP-allocated without conflict and a listener has recently probed or registered,talker,yes,unknown,P5,sim,15 s probe window
+SRP-005,4.3.3.1,Talker declaration validity,Declare a Talker attribute only when the destination MAC is MAAP-allocated without conflict and a listener has recently probed or registered,talker,yes,implemented,P5,sim,15 s probe window. Code reading 2026-11-03: the talker declares once MAAP has given an address and a PROBE_TX_COMMAND came in the last 15 s or a listener is registered; it withdraws otherwise. Exercised in openpaad_sim_audio
 BW-001,4.3.3.2,Talker Tspec,Declare MaxFrameSize and MaxIntervalFrames as tabulated for each stream format (no drift byte in MaxFrameSize),talker,yes,gap,P5,unit,GenAVB still adds the drift byte (Milan v1.2 rule); characterised in tests/unit
 BW-002,4.3.3.2,Stream bandwidth,Compute stream bandwidth with the published framing rules (header+VLAN+FCS; minimum frame; drift byte; preamble+IPG),talker,yes,partial,P5,unit,paad_stream_bandwidth_bps() matches the table; GenAVB idle slope is 64 kbit/s higher
 BW-003,4.3.3.2,CRF bandwidth,Reserve the tabulated bandwidth for a one-timestamp CRF stream,talker,yes,gap,P5,unit,5696 kbit/s in v1.3 (was 5632 in v1.2)
@@ -88,14 +88,14 @@ CTL-035,5.4.4.8,GET_STREAM_INPUT_INFO_EX,MVU GET_STREAM_INPUT_INFO_EX,listener,y
 NTF-001,5.4.5.1-3,Unsolicited notifications,Send the listed AEM and MVU unsolicited notifications,both,yes,partial,P5,sim,
 NTF-002,5.4.5.4,Departing controllers,Detect departed controllers and drop their registrations,both,yes,unknown,P5,sim,
 NTF-003,5.4.5.5,Identification,Identification notification,both,yes,unknown,P5,sim,
-ACMP-001,5.5.1.2-3,Binding and settlement,Separate binding (persistent) from settlement (probing),listener,yes,implemented,P5,sim,
+ACMP-001,5.5.1.2-3,Binding and settlement,Separate binding (persistent) from settlement (probing),listener,yes,implemented,P5,sim,Exercised end to end in openpaad_sim_audio: bind; probe; settle; unbind; rebind
 ACMP-002,5.5.1.4,Auto connect,Auto-connect behaviour,listener,optional,unknown,later,,
-ACMP-003,5.5.2.3,ACMP timeouts,Respect ACMP command timeouts,both,yes,implemented,P5,unit,
-ACMP-004,5.5.3,Listener state machine,Implement the listener sink state machine (UNBOUND to SETTLED states) including MVU events,listener,yes,partial,P5,sim,MVU-triggered transitions missing until CTL-033/034
-ACMP-005,5.5.4.1,PROBE_TX_COMMAND,Talker handling of PROBE_TX_COMMAND,talker,yes,implemented,P5,sim,
+ACMP-003,5.5.2.3,ACMP timeouts,Respect ACMP command timeouts,both,yes,implemented,P5,unit,Code reading 2026-11-03: 200 ms for every command of Table 5.26
+ACMP-004,5.5.3,Listener state machine,Implement the listener sink state machine (UNBOUND to SETTLED states) including MVU events,listener,yes,partial,P5,sim,MVU-triggered transitions missing until CTL-033/034. Code reading 2026-11-03: same eight states and the same events; TMR_RETRY 4 s; TMR_NO_TK 10 s; TMR_DELAY 0.2 to 1 s (inside the specified range)
+ACMP-005,5.5.4.1,PROBE_TX_COMMAND,Talker handling of PROBE_TX_COMMAND,talker,yes,implemented,P5,sim,Exercised end to end in openpaad_sim_audio
 ACMP-006,5.5.4.2,DISCONNECT_TX_COMMAND,Talker handling of DISCONNECT_TX_COMMAND,talker,yes,implemented,P5,sim,
 ACMP-007,5.5.4.3-4,GET_TX_STATE/GET_TX_CONNECTION,Talker state queries,talker,yes,implemented,P5,sim,
 ADP-001,5.6.2,ADPDU content,Advertise with the required ADPDU field values (valid time 10),both,yes,implemented,P5,unit,
-ADP-002,5.6.3,Advertise state machine,Advertise periodically with randomised delays; react to link and grandmaster changes,both,yes,implemented,P5,sim,Check v1.3 timer values
+ADP-002,5.6.3,Advertise state machine,Advertise periodically with randomised delays; react to link and grandmaster changes,both,yes,implemented,P5,sim,Code reading 2026-11-03: random delay 0.1 to 2 s at startup and 0.1 to 4 s otherwise; advertise every 5 s: matches v1.3
 ADP-003,5.6.4,Listener discovery,Track talker discovery and departure per sink,listener,yes,implemented,P5,sim,
 RED-001,8,Seamless network redundancy,Redundant pairs of interfaces and streams,both,no,partial,later,interop,Not in 1.0

@@ -10,8 +10,8 @@ for the rows that apply to the reference endpoint:
 
 | Status | Rows | Meaning |
 | --- | --- | --- |
-| implemented | 48 | Present upstream; still to be verified by a test |
-| unknown | 33 | Not yet checked against the code |
+| implemented | 49 | Present upstream; still to be verified by a test |
+| unknown | 32 | Not yet checked against the code |
 | partial | 9 | Present but incomplete or v1.2 behaviour |
 | gap | 7 | Missing, or contradicts v1.3 |
 

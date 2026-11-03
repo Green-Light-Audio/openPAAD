@@ -56,9 +56,9 @@ if ! awk -v secs="$secs" -v limit="$limit" '
 fi
 
 # ATDECC: entity IDs come from each device's MAC address (side a: ...:01,
-# side b: ...:02).
-id_a=00049fad00010000
-id_b=00049fad00020000
+# side b: ...:02; apps/openpaad-sim/entity.c).
+id_a=02005afffead0001
+id_b=02005afffead0002
 if ! grep -q "adp_discovery_update.*entity : $id_b" "$dir/a.log" ||
    ! grep -q "adp_discovery_update.*entity : $id_a" "$dir/b.log"; then
 	echo "FAIL: the devices did not discover each other"

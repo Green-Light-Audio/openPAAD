@@ -35,6 +35,8 @@ static struct {
 	struct paad_sim_mclk_count prev;
 
 	bool locked; /* reference taken */
+	uint32_t resets;   /* GenAVB's count when it was taken */
+	bool from_stream;
 	uint64_t ref_gptp_ns;
 	struct paad_sim_mclk_count ref;
 	double phase_max_ns;
@@ -79,8 +81,16 @@ void media_clock_report(const char *tag, unsigned int t, uint64_t source_ns, uin
 	mc.prev = now;
 	mc.prev_gptp_ns = gptp_ns;
 
-	if (st.state != PAAD_GENAVB_MCLK_REC_LOCKED) {
+	/* A new lock (after a restart, or on another source) starts a new
+	 * reference: the recovery does not keep phase across those. */
+	if (st.state != PAAD_GENAVB_MCLK_REC_LOCKED || st.resets != mc.resets || st.from_stream != mc.from_stream) {
 		mc.locked = false;
+		mc.resets = st.resets;
+		mc.from_stream = st.from_stream;
+	}
+
+	if (st.state != PAAD_GENAVB_MCLK_REC_LOCKED) {
+		/* not locked: nothing to measure the phase against */
 	} else if (!mc.locked) {
 		mc.locked = true;
 		mc.ref = now;

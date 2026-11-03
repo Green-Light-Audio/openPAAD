@@ -22,12 +22,14 @@
  * full stack on its port 0, cabled to the device of another process on the
  * same host. Side a is grandmaster capable and its clock is exact; side b
  * starts 1000 s away, ticks 20 ppm fast and is not grandmaster capable.
- * Prints the device's gPTP time minus the clock both devices share every
- * second: once locked, both sides print the same value
- * (tests/e2e/two_devices.sh).
+ * Each device is a Milan-mode ATDECC entity with one audio stream each way
+ * (entity.c); it streams audio when a controller connects it (audio.c), and
+ * recovers its media clock (media_clock.c). Every second it prints its gPTP
+ * time minus the clock both devices share (once locked, both sides print
+ * the same value), its streams and its media clock.
  *
  * Usage: openpaad-sim [-t seconds] [--virtual] [--check-gptp ns]
- *                     [--cable NAME --side a|b [--audio]] [-v | --log file]
+ *                     [--cable NAME --side a|b [--control SCRIPT]] [-v | --log file]
  *   -t seconds        run for this long, then exit (default: forever)
  *   --check-gptp ns   bench: exit with status 0 only if, over the last 5
  *                     seconds, port 1's gPTP time stayed within ns of port 0's
@@ -36,7 +38,9 @@
  *   --log file        write GenAVB's log to this file (default:
  *                     openpaad-sim.log, or openpaad-sim-<side>.log)
  *   -v                write GenAVB's log to the terminal instead
- *   --audio           device mode: an AAF stream from a to b
+ *   --control SCRIPT  device mode: also run a controller that connects b's
+ *                     audio input to a's audio output, or disconnects it, at
+ *                     given seconds: "connect@2,disconnect@10,connect@14"
  *   --virtual         simulate in virtual time (decision 0013): exact timing
  *                     whatever the host's load; both devices of a cable must
  *                     use it, and -t counts simulated seconds
@@ -59,7 +63,10 @@
 #include "paad/sim/freertos.h"
 #include "paad/sim/platform.h"
 
+#include "app.h"
 #include "audio.h"
+#include "controller.h"
+#include "entity.h"
 #include "media_clock.h"
 
 /* GenAVB internals: start the management (MAC service) and gPTP instances
@@ -79,7 +86,7 @@ static bool verbose;
 static const char *cable_name;
 static char side; /* 'a' or 'b' in device mode */
 static char tag[16] = "openpaad-sim";
-static bool audio_demo;
+static const char *control_script;
 static bool virtual_time;
 
 static struct genavb_handle *genavb;
@@ -146,9 +153,7 @@ static void finish(int status)
 	_exit(status); /* the FreeRTOS scheduler never returns to main() */
 }
 
-/* Sleep until a simulated time. FreeRTOS's tick can lose time on a busy
- * host, so the run is paced by the simulated clock, not by ticks. */
-static void sleep_until(struct paad_sim_world *world, uint64_t when)
+void app_sleep_until(struct paad_sim_world *world, uint64_t when)
 {
 	for (;;) {
 		uint64_t now = paad_sim_world_now(world);
@@ -166,6 +171,16 @@ static void start_stack(void)
 
 	genavb_get_default_config(&config);
 	config.fgptp_config.domain_cfg[0].gmCapable = (!cable_name || side == 'a') ? 1 : 0;
+
+	if (cable_name) {
+		char name[32];
+
+		snprintf(name, sizeof(name), "openpaad-sim %c", side);
+		if (entity_configure(&config.avdecc_config, paad_sim_platform()->cfg.mac[0], name, control_script != NULL) < 0) {
+			paad_sim_printf("%s: cannot build the ATDECC entities\n", tag);
+			finish(2);
+		}
+	}
 
 	if (!cable_name) {
 		/* Bench: same settings on port 1, not grandmaster capable. */
@@ -208,32 +223,45 @@ static void main_task(void *arg)
 	}
 
 	start_stack();
+	start = paad_sim_world_now(&board->world);
 
-	if (cable_name && audio_demo) {
-		/* Audio demo: a talks, b listens (talker MAC: side a's port 0). */
-		uint8_t talker_mac[6];
+	if (cable_name) {
+		int rc = audio_start(genavb, tag);
+
+		if (rc != GENAVB_SUCCESS) {
+			paad_sim_printf("%s: cannot listen for stream connections: %s\n", tag, genavb_strerror(rc));
+			finish(2);
+		}
+	}
+
+	if (control_script) {
+		/* b's audio input to a's audio output (port 0 MAC addresses:
+		 * a ...:01, b ...:02). */
+		uint8_t mac_a[6], mac_b[6];
 		int rc;
 
-		memcpy(talker_mac, board->cfg.mac[0], 6);
-		talker_mac[5] = 1;
-		rc = side == 'a' ? audio_talker_start(genavb, talker_mac) : audio_listener_start(genavb, talker_mac);
-		if (rc != GENAVB_SUCCESS)
-			paad_sim_printf("%s: audio %s failed: %s\n", tag, side == 'a' ? "talker" : "listener",
-					genavb_strerror(rc));
+		memcpy(mac_a, board->cfg.mac[0], 6);
+		memcpy(mac_b, board->cfg.mac[0], 6);
+		mac_a[5] = 1;
+		mac_b[5] = 2;
+		rc = controller_start(genavb, &board->world, start, tag, entity_id(mac_a, ENTITY_DEVICE),
+				      entity_id(mac_b, ENTITY_DEVICE));
+		if (rc != GENAVB_SUCCESS) {
+			paad_sim_printf("%s: cannot start the controller: %s\n", tag, genavb_strerror(rc));
+			finish(2);
+		}
 	}
 
 	if (cable_name)
-		paad_sim_printf("%s: device running on cable %s%s\n", tag, cable_name,
-				virtual_time ? ", virtual time" : "");
+		paad_sim_printf("%s: device running on cable %s%s, entity %016" PRIx64 "\n", tag, cable_name,
+				virtual_time ? ", virtual time" : "", entity_id(board->cfg.mac[0], ENTITY_DEVICE));
 	else
 		paad_sim_printf("%s: stack running, port 0 and port 1 joined by a %u ns cable\n", tag, CABLE_NS);
-
-	start = paad_sim_world_now(&board->world);
 
 	for (t = 1; !run_seconds || t <= run_seconds; t++) {
 		int64_t offset;
 
-		sleep_until(&board->world, start + (uint64_t)t * 1000000000ULL);
+		app_sleep_until(&board->world, start + (uint64_t)t * 1000000000ULL);
 
 		if (cable_name) {
 			uint64_t now, g;
@@ -244,8 +272,7 @@ static void main_task(void *arg)
 			}
 			paad_sim_printf("%s: t=%us gPTP - shared clock: %" PRId64 " ns\n", tag, t, (int64_t)(g - now));
 			audio_report(tag, t);
-			if (audio_demo)
-				media_clock_report(tag, t, now, g);
+			media_clock_report(tag, t, now, g);
 			continue;
 		}
 
@@ -276,7 +303,8 @@ static void main_task(void *arg)
 static void usage(const char *prog)
 {
 	fprintf(stderr,
-		"usage: %s [-t seconds] [--virtual] [--check-gptp ns] [--cable NAME --side a|b [--audio]] [-v | --log file]\n", prog);
+		"usage: %s [-t seconds] [--virtual] [--check-gptp ns] [--cable NAME --side a|b [--control SCRIPT]]\n"
+		"       [-v | --log file]\n", prog);
 	exit(2);
 }
 
@@ -344,19 +372,24 @@ int main(int argc, char **argv)
 			log_path = argv[++i];
 		else if (!strcmp(argv[i], "-v"))
 			verbose = true;
-		else if (!strcmp(argv[i], "--audio"))
-			audio_demo = true;
+		else if (!strcmp(argv[i], "--control") && i + 1 < argc)
+			control_script = argv[++i];
 		else if (!strcmp(argv[i], "--virtual"))
 			virtual_time = true;
 		else
 			usage(argv[0]);
 	}
 
-	if ((audio_demo && !cable_name) ||
+	if ((control_script && !cable_name) ||
 	    (cable_name && ((side != 'a' && side != 'b') || check_ns >= 0 || strlen(cable_name) > 40 ||
 			   strchr(cable_name, '/')))) {
 		fprintf(stderr, "--cable needs --side a or b and a short name without '/', and no --check-gptp;\n"
-				"--audio needs --cable\n");
+				"--control needs --cable\n");
+		return 2;
+	}
+
+	if (control_script && controller_parse(control_script) < 0) {
+		fprintf(stderr, "--control: expected actions like connect@2,disconnect@10,connect@14\n");
 		return 2;
 	}
 
