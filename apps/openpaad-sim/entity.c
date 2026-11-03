@@ -74,9 +74,14 @@ int entity_configure(struct avdecc_config *cfg, const uint8_t mac[6], const char
 	cfg->num_entities = 1;
 	dev->aem = aem;
 	dev->entity_id = entity_id(mac, ENTITY_DEVICE);
-	/* Start once the application listens for stream connections: it
-	 * then also gets the clock domain's initial source. */
-	dev->channel_waitmask = AVDECC_WAITMASK_MEDIA_STACK;
+	/* Start once the application listens for stream connections (it
+	 * then also gets the clock domain's initial source) and for the
+	 * commands GenAVB leaves to it (controlled.c). */
+	dev->channel_waitmask = AVDECC_WAITMASK_MEDIA_STACK | AVDECC_WAITMASK_CONTROLLED;
+	/* Milan fixes the advertisement's valid time at 20 s (10 in the ADPDU
+	 * field). GenAVB's Linux build forces it in Milan mode
+	 * (CFG_ADP_MILAN_VALID_TIME); its RTOS defaults use 62 s. */
+	dev->valid_time = 20;
 
 	if (controller) {
 		struct avdecc_entity_config *ctl = &cfg->entity_cfg[ENTITY_CONTROLLER];

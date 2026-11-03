@@ -71,6 +71,7 @@
 
 #include "app.h"
 #include "audio.h"
+#include "controlled.h"
 #include "controller.h"
 #include "entity.h"
 #include "media_clock.h"
@@ -241,8 +242,15 @@ static void main_task(void *arg)
 	start = paad_sim_world_now(&board->world);
 
 	if (device_mode) {
-		int rc = audio_start(genavb, tag);
+		int rc = controlled_start(genavb, config.avdecc_config.entity_cfg[ENTITY_DEVICE].aem, tag);
 
+		if (rc != GENAVB_SUCCESS) {
+			paad_sim_printf("%s: cannot answer the commands left to the application: %s\n", tag,
+					genavb_strerror(rc));
+			finish(2);
+		}
+
+		rc = audio_start(genavb, tag);
 		if (rc != GENAVB_SUCCESS) {
 			paad_sim_printf("%s: cannot listen for stream connections: %s\n", tag, genavb_strerror(rc));
 			finish(2);

@@ -35,6 +35,7 @@
 #include "paad/sim/console.h"
 
 #include "audio.h"
+#include "controlled.h"
 
 #define SAMPLE_RATE      48000
 #define CHANNELS         2
@@ -323,6 +324,7 @@ static void audio_task(void *arg)
 
 	for (;;) {
 		handle_media_stack();
+		controlled_poll();
 
 		if (audio.talker.handle)
 			talker_send();
