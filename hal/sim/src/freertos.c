@@ -47,17 +47,33 @@ static void wake_irq_task(void *arg)
 		vTaskNotifyGiveFromISR(irq_task_handle, &woken);
 }
 
+/* Real time: run what is due, then sleep until the next deadline. On a host
+ * too busy to keep up, something is always due again by the time the rest
+ * is done, and this task, the highest priority, would run for ever and
+ * starve every other one. After MAX_BUSY_NS without a sleep, let the tasks
+ * have a tick: interrupts come late then, as they do on a loaded host
+ * anyway, and GenAVB's timers account for the periods they missed. */
+#define MAX_BUSY_NS (2 * TICK_NS)
+
 static void irq_task_real_time(struct paad_sim_world *world)
 {
+	uint64_t busy_since = paad_sim_world_now(world);
+
 	for (;;) {
 		uint64_t next = paad_sim_world_run_pending(world);
 		uint64_t now = paad_sim_world_now(world);
 		TickType_t ticks;
 
+		if (next <= now) {
+			if (now - busy_since < MAX_BUSY_NS)
+				continue;
+			vTaskDelay(1);
+			busy_since = paad_sim_world_now(world);
+			continue;
+		}
+
 		if (next == UINT64_MAX)
 			ticks = portMAX_DELAY;
-		else if (next <= now)
-			continue;
 		else
 			ticks = (TickType_t)((next - now + TICK_NS - 1) / TICK_NS);
 
@@ -66,6 +82,7 @@ static void irq_task_real_time(struct paad_sim_world *world)
 			ticks = 1;
 
 		ulTaskNotifyTake(pdTRUE, ticks);
+		busy_since = paad_sim_world_now(world);
 	}
 }
 
