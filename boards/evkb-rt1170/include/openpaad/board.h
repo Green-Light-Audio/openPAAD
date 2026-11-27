@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 AIASK Limited (Green Light Audio)
+ * Copyright 2026 AIASK Limited, trading as Green Light Audio
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
