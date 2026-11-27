@@ -1,8 +1,8 @@
 # openPAAD
 
-**A portable, open-source firmware stack for professional audio over AVB,
-designed to interoperate with Milan devices. Reference platform: NXP
-i.MX RT1170.**
+**openPAAD (open Pro Audio AVB Device) is a portable, open-source firmware
+stack for building professional audio devices on AVB networks, designed to
+interoperate with Milan devices. Reference platform: NXP i.MX RT1170.**
 
 openPAAD turns a microcontroller or embedded processor into a pro-audio AVB
 endpoint: gPTP time, stream reservation, AAF audio and CRF media clock
