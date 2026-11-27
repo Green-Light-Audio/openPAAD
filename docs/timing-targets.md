@@ -6,7 +6,7 @@ Phase 3 exit gates measure against this page.
 | Quantity | Target | Source | Measured in |
 | --- | --- | --- | --- |
 | Class A observation interval | 125 us; one AAF frame per interval at 48 kHz (6 samples) | IEEE 802.1Q FQTSS; Milan base format | P4 |
-| Stream frame spacing jitter at the talker | Frames released by the ENET_1G credit-based shaper, never by software timing | Sacha's note on sub-125 us spacing; RT1170 ENET_1G AVB queues | P4 |
+| Stream frame spacing jitter at the talker | Frames released by the ENET_1G credit-based shaper, never by software timing | Software timers cannot space frames reliably at sub-125 us intervals; RT1170 ENET_1G AVB queues | P4 |
 | gPTP Sync interval | 125 ms | Milan 4.2.6.2.2 | P2 |
 | gPTP Announce and Pdelay intervals | 1 s | Milan 4.2.6.2.2 | P2 |
 | asCapable qualification | after 2 to 5 successful Pdelay exchanges | Milan 4.2.6.2.4 | P2 |
