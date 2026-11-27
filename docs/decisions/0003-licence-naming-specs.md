@@ -27,3 +27,7 @@
 A device built on openPAAD that wants the Milan logo must go through Avnu
 certification on its own. GET_MILAN_INFO must report a certification
 version of 0 until then (requirement CTL-030).
+
+Update, 2026-11-27: the copyright holder of openPAAD's own code is AIASK
+Limited, trading as Green Light Audio (LICENSE and file headers). The
+sign-off rule applies to contributions from outside the maintainers.

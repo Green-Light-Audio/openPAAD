@@ -1,5 +1,5 @@
 #!/bin/sh
-# Copyright 2026 openPAAD contributors
+# Copyright 2026 AIASK Limited (Green Light Audio)
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Two simulated devices connected by a controller, in virtual time (decision

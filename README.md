@@ -67,7 +67,7 @@ devcontainer.
 
 ```sh
 mkdir openpaad-workspace && cd openpaad-workspace
-git clone <this repository> openpaad
+git clone https://github.com/Green-Light-Audio/openPAAD.git openpaad
 openpaad/scripts/bootstrap.sh          # fetches pinned dependencies with west
 cd openpaad
 cmake --preset host && cmake --build --preset host && ctest --preset host

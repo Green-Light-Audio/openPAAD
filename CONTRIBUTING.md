@@ -5,9 +5,10 @@ clean.
 
 ## Sign-off (DCO)
 
-Every commit carries a `Signed-off-by:` line (`git commit -s`), certifying
-the [Developer Certificate of Origin](https://developercertificate.org/):
-you wrote the change or have the right to submit it under BSD-3-Clause.
+Contributions from outside the maintainers carry a `Signed-off-by:` line on
+every commit (`git commit -s`), certifying the
+[Developer Certificate of Origin](https://developercertificate.org/): you
+wrote the change or have the right to submit it under BSD-3-Clause.
 
 ## Specification text
 

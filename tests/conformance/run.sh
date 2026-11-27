@@ -1,5 +1,5 @@
 #!/bin/sh
-# Copyright 2026 openPAAD contributors
+# Copyright 2026 AIASK Limited (Green Light Audio)
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # ATDECC conformance run: two simulated devices share one end of a Linux veth
