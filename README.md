@@ -11,13 +11,17 @@ discover and connect devices. It builds on NXP's BSD-licensed GenAVB/TSN
 stack, adds what Milan v1.3 requires on top, and builds entirely from public
 sources.
 
-The stack has three layers. A portable core (protocols and the pro-audio
-layer) contains no chip-specific code and is built and tested on Linux and
-macOS on every commit. An explicit hardware abstraction layer (HAL) defines
-what a platform must provide: hardware timestamps, traffic shaping, clocks,
-media clock control and audio I/O. Each platform is a port of that HAL. The
-NXP i.MX RT1170 is the first and reference port; the host simulator is the
-second.
+The stack has three layers:
+
+1. A **portable core**, GenAVB's protocols and openPAAD's pro-audio layer
+   (`paad/`), contains no chip-specific code and is built and tested on Linux
+   and macOS on every commit.
+2. An explicit **hardware abstraction layer** (HAL, `hal/include/`) defines
+   what a platform must provide: hardware timestamps, traffic shaping,
+   clocks, media clock control and audio I/O.
+3. **Ports** implement the HAL for one platform each (`hal/<platform>/` and
+   `boards/<board>/`). The NXP i.MX RT1170 is the first and reference port;
+   the host simulator is the second.
 
 > Status: **Phase 1, HAL and simulator.** The full stack runs on a PC or Mac
 > on simulated hardware, where gPTP synchronises two ports; the firmware
